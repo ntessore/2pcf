@@ -568,7 +568,7 @@ int main(int argc, char* argv[])
             
             sxi = cxi = syi = cyi = 0;
             
-            #pragma omp for
+            #pragma omp for schedule(static, 1) nowait
             for(i = 0; i < ni; ++i)
             {
                 #pragma omp atomic
