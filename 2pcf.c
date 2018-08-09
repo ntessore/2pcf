@@ -22,7 +22,7 @@
 #define LINELEN 1024
 #endif
 
-enum { MODE_NONE, MODE_POINTS };
+enum { MODE_NONE, MODE_POINTS, MODE_FIELD };
 enum { SPACING_LIN, SPACING_LOG };
 enum { COORDS_FLAT, COORDS_RADEC };
 
@@ -146,7 +146,7 @@ void tree_free(node* t)
     }
 }
 
-static double* readc(const char* f, size_t* n, double u, bool rd)
+static double* readc(const char* f, int m, double ui, bool rd, size_t* n)
 {
     FILE* fp;
     int l;
@@ -155,8 +155,10 @@ static double* readc(const char* f, size_t* n, double u, bool rd)
     double* d;
     char* sx;
     char* sy;
+    char* su;
+    char* sv;
     char* sw;
-    double x, y, w;
+    double x, y, u, v, w;
     
     fp = fopen(f, "r");
     if(!fp)
@@ -167,7 +169,8 @@ static double* readc(const char* f, size_t* n, double u, bool rd)
     
     i = 0;
     a = 1;
-    d = malloc(a*7*sizeof(double));
+    
+    d = malloc(a*9*sizeof(double));
     if(!d)
     {
         perror(NULL);
@@ -178,6 +181,16 @@ static double* readc(const char* f, size_t* n, double u, bool rd)
     {
         sx = strtok(buf, " \t\r\n");
         sy = strtok(NULL, " \t\r\n");
+        if(m == MODE_FIELD)
+        {
+            su = strtok(NULL, " \t\r\n");
+            sv = strtok(NULL, " \t\r\n");
+        }
+        else
+        {
+            su = NULL;
+            sv = NULL;
+        }
         sw = strtok(NULL, " \t\r\n");
         
         if(!sx || *sx == '#')
@@ -189,28 +202,51 @@ static double* readc(const char* f, size_t* n, double u, bool rd)
             exit(EXIT_FAILURE);
         }
         
-        x = atof(sx)*u;
-        y = atof(sy)*u;
+        x = atof(sx)*ui;
+        y = atof(sy)*ui;
+        
+        if(m == MODE_FIELD)
+        {
+            if(!su || *su == '#')
+            {
+                fprintf(stderr, "error: %s:%d: missing `u` value\n", f, l);
+                exit(EXIT_FAILURE);
+            }
+            if(!sv || *sv == '#')
+            {
+                fprintf(stderr, "error: %s:%d: missing `v` value\n", f, l);
+                exit(EXIT_FAILURE);
+            }
+            u = atof(su);
+            v = atof(sv);
+        }
+        else
+        {
+            u = 0;
+            v = 0;
+        }
         
         if(!sw || *sw == '#')
             w = 1;
         else
             w = atof(sw);
         
-        d[i*7+0] = x;
-        d[i*7+1] = y;
-        d[i*7+2] = w;
-        d[i*7+3] = sin(x);
-        d[i*7+4] = cos(x);
-        d[i*7+5] = sin(y);
-        d[i*7+6] = cos(y);
+        d[i*9+0] = x;
+        d[i*9+1] = y;
+        d[i*9+2] = u;
+        d[i*9+3] = v;
+        d[i*9+4] = w;
+        d[i*9+5] = sin(x);
+        d[i*9+6] = cos(x);
+        d[i*9+7] = sin(y);
+        d[i*9+8] = cos(y);
         
         i += 1;
         
         if(i == a)
         {
             a *= 2;
-            d = realloc(d, a*7*sizeof(double));
+            d = realloc(d, a*9*sizeof(double));
             if(!d)
             {
                 perror(NULL);
@@ -221,7 +257,7 @@ static double* readc(const char* f, size_t* n, double u, bool rd)
     
     fclose(fp);
     
-    d = realloc(d, i*7*sizeof(double));
+    d = realloc(d, i*9*sizeof(double));
     if(!d)
     {
         perror(NULL);
@@ -281,6 +317,7 @@ int main(int argc, char* argv[])
     node* t2;
     
     double* W;
+    double* X;
     
     int p, np;
     size_t ni, nj, ii;
@@ -316,6 +353,8 @@ int main(int argc, char* argv[])
         {
             if(strcmp(val, "points") == 0)
                 cfg.mode = MODE_POINTS;
+            else if(strcmp(val, "field") == 0)
+                cfg.mode = MODE_FIELD;
             else
                 goto err_cfg_bad_value;
         }
@@ -425,7 +464,7 @@ int main(int argc, char* argv[])
     printf("\n");
     printf("configuration ... %s\n", infile);
     printf("\n");
-    printf("input type ...... %s\n", pt ? "points" : "none");
+    printf("input type ...... %s\n", pt ? "points" : "field");
     if(pt)
     {
         printf("data catalog .... %s\n", cfg.catalog1);
@@ -452,7 +491,7 @@ int main(int argc, char* argv[])
     
     printf("reading %s\n", pt ? "data catalog" : xc ? "catalog 1" : "catalog");
     
-    c1 = readc(cfg.catalog1, &n1, ui, rd);
+    c1 = readc(cfg.catalog1, cfg.mode, ui, rd, &n1);
     if(!c1)
     {
         fprintf(stderr, "error: could not read %s\n", cfg.catalog1);
@@ -464,7 +503,7 @@ int main(int argc, char* argv[])
     
     printf("building %s\n", pt ? "data tree" : xc ? "tree 1" : "tree");
     
-    t1 = tree(c1, 0, n1, 7, 0, cfg.leafpts, &nn);
+    t1 = tree(c1, 0, n1, 9, 0, cfg.leafpts, &nn);
     
     printf("> done with %zu nodes\n", nn);
     printf("\n");
@@ -473,7 +512,7 @@ int main(int argc, char* argv[])
     {
         printf("reading %s\n", pt ? "random catalog" : "catalog 2");
         
-        c2 = readc(cfg.catalog2, &n2, ui, rd);
+        c2 = readc(cfg.catalog2, cfg.mode, ui, rd, &n2);
         if(!c2)
         {
             fprintf(stderr, "error: could not read %s\n", cfg.catalog2);
@@ -485,7 +524,7 @@ int main(int argc, char* argv[])
         
         printf("building %s\n", pt ? "random tree" : "tree 2");
         
-        t2 = tree(c2, 0, n2, 7, 0, cfg.leafpts, &nn);
+        t2 = tree(c2, 0, n2, 9, 0, cfg.leafpts, &nn);
         
         printf("> done with %zu nodes\n", nn);
         printf("\n");
@@ -497,18 +536,14 @@ int main(int argc, char* argv[])
     }
     
     W = calloc(3*nd, sizeof(double));
-    if(!W)
+    X = calloc(3*nd, sizeof(double));
+    if(!W || !X)
     {
         perror(NULL);
         abort();
     }
     
-    if(pt)
-        np = 3;
-    else
-        np = 1;
-    
-    for(p = 0; p < np; ++p)
+    for(p = 0, np = pt ? 3 : 1; p < np; ++p)
     {
         if(pt)
         {
@@ -556,6 +591,8 @@ int main(int argc, char* argv[])
         }
         else
         {
+            printf("calculating correlations\n");
+            
             ci = c1;
             ni = n1;
             
@@ -574,11 +611,19 @@ int main(int argc, char* argv[])
             node** tl;
             
             size_t i, j;
-            double xi, yi, wi, xj, yj, wj, xk, yk, dx, xl, xh;
-            double sxi, cxi, syi, cyi, sxj, cxj, syj, cyj, d;
+            double xi, yi, ui, vi, wi, sxi, cxi, syi, cyi;
+            double xj, yj, uj, vj, wj, sxj, cxj, syj, cyj, sdx, cdx;
+            double xk, yk, dx, xl, xh;
+            double d;
             int n;
             
+            double ww, uu, uv, vu, vv;
+            double a1, b1, a2, b2, aa, ab, ba, bb, cc;
+            double sp, cp, sm, cm;
+            double xip, xim, xix;
+            
             double* Wi;
+            double* Xi;
             
             ta = 1;
             tl = malloc(ta*sizeof(node*));
@@ -589,7 +634,8 @@ int main(int argc, char* argv[])
             }
             
             Wi = calloc(3*nd, sizeof(double));
-            if(!Wi)
+            Xi = calloc(3*nd, sizeof(double));
+            if(!Wi || !Xi)
             {
                 perror(NULL);
                 abort();
@@ -619,13 +665,15 @@ int main(int argc, char* argv[])
                     alarm(1);
                 }
                 
-                xi  = ci[i*7+0];
-                yi  = ci[i*7+1];
-                wi  = ci[i*7+2];
-                sxi = ci[i*7+3];
-                cxi = ci[i*7+4];
-                syi = ci[i*7+5];
-                cyi = ci[i*7+6];
+                xi  = ci[i*9+0];
+                yi  = ci[i*9+1];
+                ui  = ci[i*9+2];
+                vi  = ci[i*9+3];
+                wi  = ci[i*9+4];
+                sxi = ci[i*9+5];
+                cxi = ci[i*9+6];
+                syi = ci[i*9+7];
+                cyi = ci[i*9+8];
                 
                 tl[0] = tj;
                 
@@ -701,16 +749,20 @@ int main(int argc, char* argv[])
                     
                     for(; j < nj; ++j)
                     {
-                        xj  = cj[j*7+0];
-                        yj  = cj[j*7+1];
-                        wj  = cj[j*7+2];
-                        sxj = cj[j*7+3];
-                        cxj = cj[j*7+4];
-                        syj = cj[j*7+5];
-                        cyj = cj[j*7+6];
+                        xj  = cj[j*9+0];
+                        yj  = cj[j*9+1];
+                        uj  = cj[j*9+2];
+                        vj  = cj[j*9+3];
+                        wj  = cj[j*9+4];
+                        sxj = cj[j*9+5];
+                        cxj = cj[j*9+6];
+                        syj = cj[j*9+7];
+                        cyj = cj[j*9+8];
+                        sdx = cxi*sxj - sxi*cxj;
+                        cdx = cxi*cxj + sxi*sxj;
                         
                         if(rd)
-                            d = acos(syi*syj + cyi*cyj*(sxi*sxj + cxi*cxj));
+                            d = acos(syi*syj + cyi*cyj*cdx);
                         else
                             d = hypot(xj - xi, yj - yi);
                         
@@ -722,7 +774,51 @@ int main(int argc, char* argv[])
                         
                         n = dm*(d - d0);
                         
-                        Wi[p*nd+n] += wi*wj;
+                        ww = wi*wj;
+                        
+                        if(!pt)
+                        {
+                            uu = ui*uj;
+                            uv = ui*vj;
+                            vu = vi*uj;
+                            vv = vi*vj;
+                            
+                            if(rd)
+                            {
+                                a1 = syj*cyi - syi*cyj*cdx;
+                                b1 = -sdx*cyj;
+                                a2 = syi*cyj - syj*cyi*cdx;
+                                b2 = sdx*cyi;
+                            }
+                            else
+                            {
+                                a1 = xj - xi;
+                                b1 = yj - yi;
+                                a2 = xi - xj;
+                                b2 = yi - yj;
+                            }
+                            
+                            aa = a1*a2;
+                            ab = a1*b2;
+                            ba = b1*a2;
+                            bb = b1*b2;
+                            cc = 1./(aa*aa + ab*ab + ba*ba + bb*bb);
+                            
+                            sp = (2*(ba - ab)*(aa + bb))*cc;
+                            cp = ((aa + ab - ba + bb)*(aa - ab + ba + bb))*cc;
+                            sm = (2*(ba + ab)*(aa - bb))*cc;
+                            cm = ((aa + ab + ba - bb)*(aa - ab - ba - bb))*cc;
+                            
+                            xip = (uu + vv)*cp - (uv - vu)*sp;
+                            xim = (uu - vv)*cm + (uv + vu)*sm;
+                            xix = (uv + vu)*cm - (uu - vv)*sm;
+                            
+                            Xi[0*nd+n] += ww*xip;
+                            Xi[1*nd+n] += ww*xim;
+                            Xi[2*nd+n] += ww*xix;
+                        }
+                        
+                        Wi[p*nd+n] += ww;
                     }
                 }
             }
@@ -740,10 +836,14 @@ int main(int argc, char* argv[])
             
             #pragma omp critical
             for(n = 0; n < 3*nd; ++n)
+            {
                 W[n] += Wi[n];
+                X[n] += Xi[n];
+            }
             
             free(tl);
             free(Wi);
+            free(Xi);
         }
     }
     
@@ -755,34 +855,50 @@ int main(int argc, char* argv[])
     }
     
     if(pt)
-    {
-        size_t NDD, NDR, NRR;
-        double DD, DR, RR;
-        
-        NDD = n1*(n1-1)/2;
-        NDR = n1*n2;
-        NRR = n2*(n2-1)/2;
-        
         fprintf(fp, "# theta w\n");
+    else
+        fprintf(fp, "# theta xip xim xix\n");
+    
+    for(int n = 0; n < nd; ++n)
+    {
+        double d;
         
-        for(int n = 0; n < nd; ++n)
+        d = d0 + (n + 0.5)/dm;
+        if(ls)
+            d = exp(d);
+        d /= uo;
+        
+        if(pt)
         {
-            double d = d0 + (n + 0.5)/dm;
+            size_t ndd, ndr, nrr;
+            double dd, dr, rr;
             
-            if(ls)
-                d = exp(d);
+            ndd = n1*(n1-1)/2;
+            ndr = n1*n2;
+            nrr = n2*(n2-1)/2;
             
-            DD = W[0*nd+n]/NDD;
-            DR = W[1*nd+n]/NDR;
-            RR = W[2*nd+n]/NRR;
+            dd = W[0*nd+n]/ndd;
+            dr = W[1*nd+n]/ndr;
+            rr = W[2*nd+n]/nrr;
             
-            fprintf(fp, "%.18e %.18e\n", d/uo, (DD - 2*DR + RR)/RR);
+            fprintf(fp, "%.18e %.18e\n", d, (dd - 2*dr + rr)/rr);
+        }
+        else
+        {
+            double xip, xim, xix;
+            
+            xip = X[0*nd+n]/W[n];
+            xim = X[1*nd+n]/W[n];
+            xix = X[2*nd+n]/W[n];
+            
+            fprintf(fp, "%.18e %.18e %.18e %.18e\n", d, xip, xim, xix);
         }
     }
     
     fclose(fp);
     
     free(W);
+    free(X);
     tree_free(t1);
     tree_free(t2);
     free(c1);
