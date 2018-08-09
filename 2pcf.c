@@ -23,14 +23,6 @@
 #endif
 
 enum {
-    CORR_DD,
-    CORR_DR,
-    CORR_RR,
-    /*-------*/
-    CORR_DONE
-};
-
-enum {
     UNIT_RAD,
     UNIT_DEG,
     UNIT_ARCMIN,
@@ -268,8 +260,8 @@ int main(int argc, char* argv[])
     
     struct {
         char output[LINELEN];
-        char data[LINELEN];
-        char random[LINELEN];
+        char catalog1[LINELEN];
+        char catalog2[LINELEN];
         int dunit;
         int coords;
         int nth;
@@ -280,37 +272,32 @@ int main(int argc, char* argv[])
         int leafpts;
     } cfg;
     
-    size_t ndat, nran;
-    double* cdat;
-    double* cran;
-    
-    size_t nnod;
-    node* tdat;
-    node* tran;
-    
-    bool ls, rd;
+    bool xc, ls, rd;
     int nd;
     double dl, dh, sdh, dm, d0;
     double ui, uo;
     
+    size_t nc1, nc2;
+    double* c1;
+    double* c2;
+    
+    size_t nn;
+    node* t1;
+    node* t2;
+    
     double* W;
     
-    int act;
+    int p, np;
     size_t ni, nj, ii;
     double* ci;
     double* cj;
     node* tj;
-    bool xc;
     
     size_t NDD, NDR, NRR;
     double DD, DR, RR;
     
     if(argc > 2)
         goto err_usage;
-    
-    memset(&cfg, 0, sizeof cfg);
-    
-    cfg.leafpts = 8;
     
     infile = argc > 1 ? argv[1] : "2pcf.cfg";
     
@@ -320,6 +307,8 @@ int main(int argc, char* argv[])
         perror(infile);
         return EXIT_FAILURE;
     }
+    
+    memset(&cfg, 0, sizeof cfg);
     
     for(line = 1; fgets(buf, sizeof(buf), fp); ++line)
     {
@@ -333,10 +322,12 @@ int main(int argc, char* argv[])
         
         if(strcmp(key, "output") == 0)
             strncpy(cfg.output, val, sizeof cfg.output);
-        else if(strcmp(key, "data") == 0)
-            strncpy(cfg.data, val, sizeof cfg.data);
-        else if(strcmp(key, "random") == 0)
-            strncpy(cfg.random, val, sizeof cfg.random);
+        else if(strcmp(key, "catalog") == 0)
+            strncpy(cfg.catalog1, val, sizeof cfg.catalog1);
+        else if(strcmp(key, "catalog1") == 0)
+            strncpy(cfg.catalog1, val, sizeof cfg.catalog1);
+        else if(strcmp(key, "catalog2") == 0)
+            strncpy(cfg.catalog2, val, sizeof cfg.catalog2);
         else if(strcmp(key, "dunit") == 0)
         {
             for(cfg.dunit = 0; cfg.dunit < NUM_UNITS; ++cfg.dunit)
@@ -387,10 +378,8 @@ int main(int argc, char* argv[])
     
     if(!strlen(cfg.output))
         { key = "output"; goto err_cfg_missing_key; }
-    if(!strlen(cfg.data))
-        { key = "data"; goto err_cfg_missing_key; }
-    if(!strlen(cfg.random))
-        { key = "random"; goto err_cfg_missing_key; }
+    if(!strlen(cfg.catalog1))
+        { key = "catalog"; goto err_cfg_missing_key; }
     if(!cfg.nth)
         { key = "nth"; goto err_cfg_missing_key; }
     if(!cfg.thmin)
@@ -398,11 +387,21 @@ int main(int argc, char* argv[])
     if(!cfg.thmax)
         { key = "thmax"; goto err_cfg_missing_key; }
     
-    ui = UCONV[cfg.dunit];
-    uo = UCONV[cfg.thunit];
+    if(!cfg.leafpts)
+        cfg.leafpts = 8;
     
+    xc = !!strlen(cfg.catalog2);
     rd = cfg.coords == COORDS_RADEC;
     ls = cfg.spacing == SPACING_LOG;
+    
+    if(!xc)
+    {
+        fprintf(stderr, "error: requires `catalog2` for random points\n");
+        return EXIT_FAILURE;
+    }
+    
+    ui = UCONV[cfg.dunit];
+    uo = UCONV[cfg.thunit];
     
     nd = cfg.nth;
     dl = cfg.thmin*uo;
@@ -423,8 +422,13 @@ int main(int argc, char* argv[])
     
     printf("\n");
     printf("configuration ... %s\n", infile);
-    printf("data catalog .... %s\n", cfg.data);
-    printf("random catalog .. %s\n", cfg.random);
+    if(!xc)
+        printf("catalog ......... %s\n", cfg.catalog1);
+    else
+    {
+        printf("catalog 1 ....... %s\n", cfg.catalog1);
+        printf("catalog 2 ....... %s\n", cfg.catalog2);
+    }
     printf("data units ...... %s\n", UNAME[cfg.dunit]);
     printf("coordinates ..... %s\n", rd ? "spherical" : "flat");
     printf("\n");
@@ -437,43 +441,46 @@ int main(int argc, char* argv[])
     printf("leaf points ..... %d\n", cfg.leafpts);
     printf("\n");
     
-    printf("reading data catalog\n");
+    printf("reading catalog%s\n", xc ? " 1" : "");
     
-    cdat = readc(cfg.data, &ndat, ui, rd);
-    if(!cdat)
+    c1 = readc(cfg.catalog1, &nc1, ui, rd);
+    if(!c1)
     {
-        fprintf(stderr, "error: %s: could not read catalog\n", cfg.data);
+        fprintf(stderr, "error: could not read %s\n", cfg.catalog1);
         return EXIT_FAILURE;
     }
     
-    printf("> done with %zu points\n", ndat);
+    printf("> done with %zu points\n", nc1);
     printf("\n");
     
-    printf("building data tree\n");
+    printf("building tree%s\n", xc ? " 1" : "");
     
-    tdat = tree(cdat, 0, ndat, 7, 0, cfg.leafpts, &nnod);
+    t1 = tree(c1, 0, nc1, 7, 0, cfg.leafpts, &nn);
     
-    printf("> done with %zu nodes\n", nnod);
+    printf("> done with %zu nodes\n", nn);
     printf("\n");
     
-    printf("reading random catalog\n");
-    
-    cran = readc(cfg.random, &nran, ui, rd);
-    if(!cran)
+    if(xc)
     {
-        fprintf(stderr, "error: %s: could not read catalog\n", cfg.random);
-        return EXIT_FAILURE;
+        printf("reading catalog 2\n");
+        
+        c2 = readc(cfg.catalog2, &nc2, ui, rd);
+        if(!c2)
+        {
+            fprintf(stderr, "error: could not read %s\n", cfg.catalog2);
+            return EXIT_FAILURE;
+        }
+        
+        printf("> done with %zu points\n", nc2);
+        printf("\n");
+        
+        printf("building tree 2\n");
+        
+        t2 = tree(c2, 0, nc2, 7, 0, cfg.leafpts, &nn);
+        
+        printf("> done with %zu nodes\n", nn);
+        printf("\n");
     }
-    
-    printf("> done with %zu points\n", nran);
-    printf("\n");
-    
-    printf("building random tree\n");
-    
-    tran = tree(cran, 0, nran, 7, 0, cfg.leafpts, &nnod);
-    
-    printf("> done with %zu nodes\n", nnod);
-    printf("\n");
     
     W = calloc(3*nd, sizeof(double));
     if(!W)
@@ -482,43 +489,46 @@ int main(int argc, char* argv[])
         abort();
     }
     
-    for(act = CORR_DD; act != CORR_DONE; ++act)
+    for(p = 0, np = 3; p < np; ++p)
     {
-        printf("calculating %s correlations\n",
-                    act == CORR_DD ? "DD" : act == CORR_DR ? "DR" : "RR");
-        
-        switch(act)
+        switch(p)
         {
-        case CORR_DD:
-            ci = cdat;
-            ni = ndat;
-            
-            cj = cdat;
-            tj = tdat;
+        case 0:
+            printf("calculating DD correlations\n");
             
             xc = false;
             
+            ci = c1;
+            ni = nc1;
+            
+            cj = c1;
+            tj = t1;
+            
             break;
             
-        case CORR_DR:
-            ci = cdat;
-            ni = ndat;
-            
-            cj = cran;
-            tj = tran;
+        case 1:
+            printf("calculating DR correlations\n");
             
             xc = true;
             
+            ci = c1;
+            ni = nc1;
+            
+            cj = c2;
+            tj = t2;
+            
             break;
             
-        default:
-            ci = cran;
-            ni = nran;
-            
-            cj = cran;
-            tj = tran;
+        case 2:
+            printf("calculating RR correlations\n");
             
             xc = false;
+            
+            ci = c2;
+            ni = nc2;
+            
+            cj = c2;
+            tj = t2;
             
             break;
         }
@@ -682,7 +692,7 @@ int main(int argc, char* argv[])
                         
                         n = dm*(d - d0);
                         
-                        Wi[act*nd+n] += wi*wj;
+                        Wi[p*nd+n] += wi*wj;
                     }
                 }
             }
@@ -707,9 +717,9 @@ int main(int argc, char* argv[])
         }
     }
     
-    NDD = ndat*(ndat-1)/2;
-    NDR = ndat*nran;
-    NRR = nran*(nran-1)/2;
+    NDD = nc1*(nc1-1)/2;
+    NDR = nc1*nc2;
+    NRR = nc2*(nc2-1)/2;
     
     fp = fopen(cfg.output, "w");
     if(!fp)
@@ -737,10 +747,10 @@ int main(int argc, char* argv[])
     fclose(fp);
     
     free(W);
-    tree_free(tdat);
-    tree_free(tran);
-    free(cdat);
-    free(cran);
+    tree_free(t1);
+    tree_free(t2);
+    free(c1);
+    free(c2);
     
     return EXIT_SUCCESS;
     
