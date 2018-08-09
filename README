@@ -1,0 +1,11 @@
+2pcf: two-point correlation function semi-tree code
+---------------------------------------------------
+
+The 2pcf code computes the two-point correlation function (DD - 2DR + RR)/RR
+from all available pairs with the help of a semi-tree code (pairs are selected
+using a tree, and pairs -- not leaf nodes -- are correlated).
+
+The code is controlled via a configuration file, and an example is provided.
+
+Compiler options can be customised using the `local.mk` include file for make.
+Support for OpenMP parallelisation can be enabled there.
