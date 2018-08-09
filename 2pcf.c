@@ -530,10 +530,10 @@ int main(int argc, char* argv[])
             time_t Tini, Tnow;
             int dT;
             
+            size_t tn, ta;
             node** tl;
-            size_t ta;
             
-            size_t i, j, k;
+            size_t i, j;
             double xi, yi, wi, xj, yj, wj, xk, yk, dx, xl, xh;
             double sxi, cxi, syi, cyi, sxj, cxj, syj, cyj, d;
             int n;
@@ -589,15 +589,15 @@ int main(int argc, char* argv[])
                 
                 tl[0] = tj;
                 
-                for(k = 1; k > 0; --k)
+                for(tn = 1; tn > 0; --tn)
                 {
-                    if(!xc && tl[k-1]->n <= i+1)
+                    if(!xc && tl[tn-1]->n <= i+1)
                         continue;
                     
-                    xj = tl[k-1]->x[0];
-                    yj = tl[k-1]->y[0];
-                    xk = tl[k-1]->x[1];
-                    yk = tl[k-1]->y[1];
+                    xj = tl[tn-1]->x[0];
+                    yj = tl[tn-1]->y[0];
+                    xk = tl[tn-1]->x[1];
+                    yk = tl[tn-1]->y[1];
                     
                     if(yj - yi >= dh || yi - yk >= dh)
                         continue;
@@ -632,9 +632,9 @@ int main(int argc, char* argv[])
                             continue;
                     }
                     
-                    if(tl[k-1]->l)
+                    if(tl[tn-1]->l)
                     {
-                        if(k == ta)
+                        if(tn == ta)
                         {
                             ta *= 2;
                             tl = realloc(tl, ta*sizeof(node*));
@@ -645,16 +645,16 @@ int main(int argc, char* argv[])
                             }
                         }
                         
-                        tl[k] = tl[k-1]->l;
-                        tl[k-1] = tl[k-1]->r;
+                        tl[tn] = tl[tn-1]->l;
+                        tl[tn-1] = tl[tn-1]->r;
                         
-                        k += 2;
+                        tn += 2;
                         
                         continue;
                     }
                     
-                    j = tl[k-1]->i;
-                    nj = tl[k-1]->n;
+                    j = tl[tn-1]->i;
+                    nj = tl[tn-1]->n;
                     
                     if(!xc && j < i+1)
                         j = i+1;
