@@ -214,14 +214,10 @@ static double* readc(const char* f, size_t* n, double u, bool rd)
         d[i*7+0] = x;
         d[i*7+1] = y;
         d[i*7+2] = w;
-        
-        if(rd)
-        {
-            d[i*7+3] = sin(x);
-            d[i*7+4] = cos(x);
-            d[i*7+5] = sin(y);
-            d[i*7+6] = cos(y);
-        }
+        d[i*7+3] = sin(x);
+        d[i*7+4] = cos(x);
+        d[i*7+5] = sin(y);
+        d[i*7+6] = cos(y);
         
         i += 1;
         
@@ -566,8 +562,6 @@ int main(int argc, char* argv[])
                 alarm(1);
             }
             
-            sxi = cxi = syi = cyi = 0;
-            
             #pragma omp for schedule(static, 1) nowait
             for(i = 0; i < ni; ++i)
             {
@@ -585,17 +579,13 @@ int main(int argc, char* argv[])
                     alarm(1);
                 }
                 
-                xi = ci[i*7+0];
-                yi = ci[i*7+1];
-                wi = ci[i*7+2];
-                
-                if(rd)
-                {
-                    sxi = ci[i*7+3];
-                    cxi = ci[i*7+4];
-                    syi = ci[i*7+5];
-                    cyi = ci[i*7+6];
-                }
+                xi  = ci[i*7+0];
+                yi  = ci[i*7+1];
+                wi  = ci[i*7+2];
+                sxi = ci[i*7+3];
+                cxi = ci[i*7+4];
+                syi = ci[i*7+5];
+                cyi = ci[i*7+6];
                 
                 tl[0] = tj;
                 
@@ -671,19 +661,16 @@ int main(int argc, char* argv[])
                     
                     for(; j < nj; ++j)
                     {
-                        xj = cj[j*7+0];
-                        yj = cj[j*7+1];
-                        wj = cj[j*7+2];
+                        xj  = cj[j*7+0];
+                        yj  = cj[j*7+1];
+                        wj  = cj[j*7+2];
+                        sxj = cj[j*7+3];
+                        cxj = cj[j*7+4];
+                        syj = cj[j*7+5];
+                        cyj = cj[j*7+6];
                         
                         if(rd)
-                        {
-                            sxj = cj[j*7+3];
-                            cxj = cj[j*7+4];
-                            syj = cj[j*7+5];
-                            cyj = cj[j*7+6];
-                            
                             d = acos(syi*syj + cyi*cyj*(sxi*sxj + cxi*cxj));
-                        }
                         else
                             d = hypot(xj - xi, yj - yi);
                         
