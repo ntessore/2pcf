@@ -51,6 +51,8 @@ const char* UNAME[NUM_UNITS] = {
 
 static const double TWO_PI = 6.2831853071795864769;
 
+static const int DW = 9;
+
 int cmp0(const void* a, const void* b)
 {
     const double* x = a;
@@ -74,7 +76,7 @@ typedef struct node {
     struct node* r;
 } node;
 
-node* tree(double* p, size_t i, size_t n, size_t m, int d, size_t s, size_t* c)
+node* tree(double* p, size_t i, size_t n, int d, size_t s, size_t* c)
 {
     node* t;
     
@@ -92,37 +94,37 @@ node* tree(double* p, size_t i, size_t n, size_t m, int d, size_t s, size_t* c)
     {
         if(c)
             *c = 0;
-        qsort(p+i*m, n-i, m*sizeof(double), cmp1);
+        qsort(p+i*DW, n-i, DW*sizeof(double), cmp1);
     }
     
     if(d & 1)
     {
-        t->x[0] = p[i*m];
-        t->x[1] = p[(n-1)*m];
+        t->x[0] = p[i*DW];
+        t->x[1] = p[(n-1)*DW];
     }
     else
     {
-        t->y[0] = p[i*m+1];
-        t->y[1] = p[(n-1)*m+1];
+        t->y[0] = p[i*DW+1];
+        t->y[1] = p[(n-1)*DW+1];
     }
     
-    qsort(p+i*m, n-i, m*sizeof(double), d%2 ? cmp1 : cmp0);
+    qsort(p+i*DW, n-i, DW*sizeof(double), d%2 ? cmp1 : cmp0);
     
     if(d & 1)
     {
-        t->y[0] = p[i*m+1];
-        t->y[1] = p[(n-1)*m+1];
+        t->y[0] = p[i*DW+1];
+        t->y[1] = p[(n-1)*DW+1];
     }
     else
     {
-        t->x[0] = p[i*m];
-        t->x[1] = p[(n-1)*m];
+        t->x[0] = p[i*DW];
+        t->x[1] = p[(n-1)*DW];
     }
     
     if(n-i > s)
     {
-        t->l = tree(p, i, (i+n)/2, m, d+1, s, c);
-        t->r = tree(p, (i+n)/2, n, m, d+1, s, c);
+        t->l = tree(p, i, (i+n)/2, d+1, s, c);
+        t->r = tree(p, (i+n)/2, n, d+1, s, c);
     }
     else
     {
@@ -170,7 +172,7 @@ static double* readc(const char* f, int m, double ui, bool rd, size_t* n)
     i = 0;
     a = 1;
     
-    d = malloc(a*9*sizeof(double));
+    d = malloc(a*DW*sizeof(double));
     if(!d)
     {
         perror(NULL);
@@ -231,22 +233,22 @@ static double* readc(const char* f, int m, double ui, bool rd, size_t* n)
         else
             w = atof(sw);
         
-        d[i*9+0] = x;
-        d[i*9+1] = y;
-        d[i*9+2] = u;
-        d[i*9+3] = v;
-        d[i*9+4] = w;
-        d[i*9+5] = sin(x);
-        d[i*9+6] = cos(x);
-        d[i*9+7] = sin(y);
-        d[i*9+8] = cos(y);
+        d[i*DW+0] = x;
+        d[i*DW+1] = y;
+        d[i*DW+2] = u;
+        d[i*DW+3] = v;
+        d[i*DW+4] = w;
+        d[i*DW+5] = sin(x);
+        d[i*DW+6] = cos(x);
+        d[i*DW+7] = sin(y);
+        d[i*DW+8] = cos(y);
         
         i += 1;
         
         if(i == a)
         {
             a *= 2;
-            d = realloc(d, a*9*sizeof(double));
+            d = realloc(d, a*DW*sizeof(double));
             if(!d)
             {
                 perror(NULL);
@@ -257,7 +259,7 @@ static double* readc(const char* f, int m, double ui, bool rd, size_t* n)
     
     fclose(fp);
     
-    d = realloc(d, i*9*sizeof(double));
+    d = realloc(d, i*DW*sizeof(double));
     if(!d)
     {
         perror(NULL);
@@ -505,7 +507,7 @@ int main(int argc, char* argv[])
     
     printf("building %s\n", pt ? "data tree" : xc ? "tree 1" : "tree");
     
-    t1 = tree(c1, 0, n1, 9, 0, cfg.leafpts, &nn);
+    t1 = tree(c1, 0, n1, 0, cfg.leafpts, &nn);
     
     printf("> done with %zu nodes\n", nn);
     printf("\n");
@@ -526,7 +528,7 @@ int main(int argc, char* argv[])
         
         printf("building %s\n", pt ? "random tree" : "tree 2");
         
-        t2 = tree(c2, 0, n2, 9, 0, cfg.leafpts, &nn);
+        t2 = tree(c2, 0, n2, 0, cfg.leafpts, &nn);
         
         printf("> done with %zu nodes\n", nn);
         printf("\n");
@@ -670,15 +672,15 @@ int main(int argc, char* argv[])
                     alarm(1);
                 }
                 
-                xi  = ci[i*9+0];
-                yi  = ci[i*9+1];
-                ui  = ci[i*9+2];
-                vi  = ci[i*9+3];
-                wi  = ci[i*9+4];
-                sxi = ci[i*9+5];
-                cxi = ci[i*9+6];
-                syi = ci[i*9+7];
-                cyi = ci[i*9+8];
+                xi  = ci[i*DW+0];
+                yi  = ci[i*DW+1];
+                ui  = ci[i*DW+2];
+                vi  = ci[i*DW+3];
+                wi  = ci[i*DW+4];
+                sxi = ci[i*DW+5];
+                cxi = ci[i*DW+6];
+                syi = ci[i*DW+7];
+                cyi = ci[i*DW+8];
                 
                 tl[0] = tj;
                 
@@ -754,15 +756,15 @@ int main(int argc, char* argv[])
                     
                     for(; j < nj; ++j)
                     {
-                        xj  = cj[j*9+0];
-                        yj  = cj[j*9+1];
-                        uj  = cj[j*9+2];
-                        vj  = cj[j*9+3];
-                        wj  = cj[j*9+4];
-                        sxj = cj[j*9+5];
-                        cxj = cj[j*9+6];
-                        syj = cj[j*9+7];
-                        cyj = cj[j*9+8];
+                        xj  = cj[j*DW+0];
+                        yj  = cj[j*DW+1];
+                        uj  = cj[j*DW+2];
+                        vj  = cj[j*DW+3];
+                        wj  = cj[j*DW+4];
+                        sxj = cj[j*DW+5];
+                        cxj = cj[j*DW+6];
+                        syj = cj[j*DW+7];
+                        cyj = cj[j*DW+8];
                         sdx = cxi*sxj - sxi*cxj;
                         cdx = cxi*cxj + sxi*sxj;
                         
