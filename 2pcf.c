@@ -269,7 +269,7 @@ static double* readc(const char* f, int m, double ui, bool rd, size_t* n)
     return d;
 }
 
-volatile sig_atomic_t flag_fb = 0;
+volatile sig_atomic_t flag_fb;
 
 #pragma omp threadprivate(flag_fb)
 
@@ -324,6 +324,8 @@ int main(int argc, char* argv[])
     double* ci;
     double* cj;
     node* tj;
+    
+    size_t i, j;
     
     if(argc > 2)
         goto err_usage;
@@ -601,8 +603,11 @@ int main(int argc, char* argv[])
         }
         
         ii = 0;
+        nn = 0;
         
-        #pragma omp parallel
+        #pragma omp parallel default(none) shared(ii, nn, W, X) \
+            private(i, j, nj) firstprivate(pt, xc, rd, ls, nd, dl, dh, d0, \
+                dm, sdh, p, ni, ci, cj, tj, stdout)
         {
             time_t Tini, Tnow;
             int dT;
@@ -610,7 +615,6 @@ int main(int argc, char* argv[])
             size_t tn, ta;
             node** tl;
             
-            size_t i, j;
             double xi, yi, ui, vi, wi, sxi, cxi, syi, cyi;
             double xj, yj, uj, vj, wj, sxj, cxj, syj, cyj, sdx, cdx;
             double xk, yk, dx, xl, xh;
@@ -645,6 +649,7 @@ int main(int argc, char* argv[])
             {
                 time(&Tini);
                 signal(SIGALRM, fbhandler);
+                flag_fb = 0;
                 alarm(1);
             }
             
@@ -819,8 +824,18 @@ int main(int argc, char* argv[])
                         }
                         
                         Wi[p*nd+n] += ww;
+                        
+                        #pragma omp atomic
+                        nn += 1;
                     }
                 }
+            }
+            
+            #pragma omp critical
+            for(i = 0; i < 3*nd; ++i)
+            {
+                W[i] += Wi[i];
+                X[i] += Xi[i];
             }
             
             #pragma omp master
@@ -829,16 +844,9 @@ int main(int argc, char* argv[])
                 
                 time(&Tnow);
                 dT = difftime(Tnow, Tini);
-                printf("\r> done in %02d:%02d:%02d  \n",
-                                            dT/3600, (dT/60)%60, dT%60);
+                printf("\r> done with %zu pairs in %02d:%02d:%02d  \n",
+                                            nn, dT/3600, (dT/60)%60, dT%60);
                 printf("\n");
-            }
-            
-            #pragma omp critical
-            for(n = 0; n < 3*nd; ++n)
-            {
-                W[n] += Wi[n];
-                X[n] += Xi[n];
             }
             
             free(tl);
