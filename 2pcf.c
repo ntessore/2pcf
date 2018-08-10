@@ -838,6 +838,11 @@ int main(int argc, char* argv[])
                 X[i] += Xi[i];
             }
             
+            free(tl);
+            free(Wi);
+            free(Xi);
+            
+            #pragma omp barrier
             #pragma omp master
             {
                 signal(SIGALRM, SIG_IGN);
@@ -848,10 +853,6 @@ int main(int argc, char* argv[])
                                             nn, dT/3600, (dT/60)%60, dT%60);
                 printf("\n");
             }
-            
-            free(tl);
-            free(Wi);
-            free(Xi);
         }
     }
     
