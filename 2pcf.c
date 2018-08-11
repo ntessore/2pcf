@@ -295,6 +295,8 @@ int main(int argc, char* argv[])
         char catalog2[LINELEN];
         int dunit;
         int coords;
+        int spin1;
+        int spin2;
         char output[LINELEN];
         int nth;
         double thmin;
@@ -308,6 +310,7 @@ int main(int argc, char* argv[])
     int nd;
     double dl, dh, sdh, dm, d0;
     double ui, uo;
+    int S1, S2;
     
     size_t n1, n2;
     double* c1;
@@ -325,6 +328,7 @@ int main(int argc, char* argv[])
     double* ci;
     double* cj;
     node* tj;
+    int Si, Sj;
     
     size_t i, j;
     
@@ -384,6 +388,12 @@ int main(int argc, char* argv[])
             else
                 goto err_cfg_bad_value;
         }
+        else if(strcmp(key, "spin") == 0)
+            cfg.spin1 = atoi(val) + 1;
+        else if(strcmp(key, "spin1") == 0)
+            cfg.spin1 = atoi(val) + 1;
+        else if(strcmp(key, "spin2") == 0)
+            cfg.spin2 = atoi(val) + 1;
         else if(strcmp(key, "output") == 0)
             strncpy(cfg.output, val, sizeof cfg.output);
         else if(strcmp(key, "nth") == 0)
@@ -464,6 +474,9 @@ int main(int argc, char* argv[])
         dm = nd/(dh - d0);
     }
     
+    S1 = cfg.spin1 ? cfg.spin1 - 1 : 0;
+    S2 = cfg.spin2 ? cfg.spin2 - 1 : S1;
+    
     printf("\n");
     printf("configuration ... %s\n", infile);
     printf("\n");
@@ -482,6 +495,16 @@ int main(int argc, char* argv[])
     }
     printf("data units ...... %s\n", UNAME[cfg.dunit]);
     printf("coordinates ..... %s\n", rd ? "spherical" : "flat");
+    if(!pt)
+    {
+        if(!xc)
+            printf("field spin ...... %d\n", S1);
+        else
+        {
+            printf("field 1 spin .... %d\n", S1);
+            printf("field 2 spin .... %d\n", S2);
+        }
+    }
     printf("\n");
     printf("output file ..... %s\n", cfg.output);
     printf("bin count ....... %u\n", cfg.nth);
@@ -550,6 +573,8 @@ int main(int argc, char* argv[])
     {
         if(pt)
         {
+            Si = Sj = 0;
+            
             switch(p)
             {
             case 0:
@@ -598,9 +623,11 @@ int main(int argc, char* argv[])
             
             ci = c1;
             ni = n1;
+            Si = S1;
             
             cj = xc ? c2 : c1;
             tj = xc ? t2 : t1;
+            Sj = xc ? S2 : S1;
         }
         
         ii = 0;
@@ -608,7 +635,7 @@ int main(int argc, char* argv[])
         
         #pragma omp parallel default(none) shared(ii, nn, W, X) \
             private(i, j, nj) firstprivate(pt, xc, rd, ls, nd, dl, dh, d0, \
-                dm, sdh, p, ni, ci, cj, tj, stdout)
+                dm, sdh, p, ni, ci, cj, tj, Si, Sj, stdout)
         {
             time_t st;
             int dt;
@@ -623,8 +650,8 @@ int main(int argc, char* argv[])
             double d;
             int n;
             
+            double a, b, h, sij, cij, sji, cji;
             double ww, uu, uv, vu, vv;
-            double a1, b1, a2, b2, aa, ab, ba, bb, cc;
             double sp, cp, sm, cm;
             double xip, xim, xix;
             
@@ -754,11 +781,12 @@ int main(int argc, char* argv[])
                         cxj = cj[j*DW+6];
                         syj = cj[j*DW+7];
                         cyj = cj[j*DW+8];
+                        
                         sdx = cxi*sxj - sxi*cxj;
                         cdx = cxi*cxj + sxi*sxj;
                         
                         if(rd)
-                            d = acos(syi*syj + cyi*cyj*cdx);
+                            d = acos(fmax(-1, fmin(1, syi*syj + cyi*cyj*cdx)));
                         else
                             d = hypot(xj - xi, yj - yi);
                         
@@ -774,40 +802,87 @@ int main(int argc, char* argv[])
                         
                         if(!pt)
                         {
+                            if(Si > 0)
+                            {
+                                if(rd)
+                                {
+                                    a = cyi*syj - syi*cyj*cdx;
+                                    b = cyj*sdx;
+                                }
+                                else
+                                {
+                                    a = xj - xi;
+                                    b = yj - yi;
+                                }
+                                
+                                h = hypot(a, b);
+                                a = a/h;
+                                b = b/h;
+                                
+                                cij = a;
+                                sij = b;
+                                for(int k = 1; k < Si; ++k)
+                                {
+                                    const double k1 = a*(cij + sij);
+                                    const double k2 = (a + b)*sij;
+                                    const double k3 = (b - a)*cij;
+                                    cij = k1 - k2;
+                                    sij = k1 + k3;
+                                }
+                            }
+                            else
+                            {
+                                cij = 1;
+                                sij = 0;
+                            }
+                            
+                            if(Sj > 0)
+                            {
+                                if(rd)
+                                {
+                                    a = cyj*syi - syj*cyi*cdx;
+                                    b = -cyi*sdx;
+                                }
+                                else
+                                {
+                                    a = xi - xj;
+                                    b = yi - yj;
+                                }
+                                
+                                h = hypot(a, b);
+                                a = a/h;
+                                b = b/h;
+                                
+                                cji = a;
+                                sji = b;
+                                for(int k = 1; k < Sj; ++k)
+                                {
+                                    const double k1 = a*(cji + sji);
+                                    const double k2 = (a + b)*sji;
+                                    const double k3 = (b - a)*cji;
+                                    cji = k1 - k2;
+                                    sji = k1 + k3;
+                                }
+                            }
+                            else
+                            {
+                                cji = 1;
+                                sji = 0;
+                            }
+                            
                             uu = ui*uj;
                             uv = ui*vj;
                             vu = vi*uj;
                             vv = vi*vj;
                             
-                            if(rd)
-                            {
-                                a1 = syj*cyi - syi*cyj*cdx;
-                                b1 = -sdx*cyj;
-                                a2 = syi*cyj - syj*cyi*cdx;
-                                b2 = sdx*cyi;
-                            }
-                            else
-                            {
-                                a1 = xj - xi;
-                                b1 = yj - yi;
-                                a2 = xi - xj;
-                                b2 = yi - yj;
-                            }
-                            
-                            aa = a1*a2;
-                            ab = a1*b2;
-                            ba = b1*a2;
-                            bb = b1*b2;
-                            cc = 1./(aa*aa + ab*ab + ba*ba + bb*bb);
-                            
-                            sp = (2*(ba - ab)*(aa + bb))*cc;
-                            cp = ((aa + ab - ba + bb)*(aa - ab + ba + bb))*cc;
-                            sm = (2*(ba + ab)*(aa - bb))*cc;
-                            cm = ((aa + ab + ba - bb)*(aa - ab - ba - bb))*cc;
+                            cp = cij*cji + sij*sji;
+                            sp = sij*cji - cij*sji;
+                            cm = cij*cji - sij*sji;
+                            sm = sij*cji + cij*sji;
                             
                             xip = (uu + vv)*cp - (uv - vu)*sp;
-                            xim = (uu - vv)*cm + (uv + vu)*sm;
-                            xix = (uv + vu)*cm - (uu - vv)*sm;
+                            xim = (uu - vv)*cm - (uv + vu)*sm;
+                            xix = (uv + vu)*cm + (uu - vv)*sm;
                             
                             Xi[0*nd+n] += ww*xip;
                             Xi[1*nd+n] += ww*xim;
