@@ -647,11 +647,13 @@ int main(int argc, char* argv[])
                 abort();
             }
             
+            flag_fb = 0;
+            Tini = Tnow = time(NULL);
+            dT = 0;
+            
             #pragma omp master
             {
-                time(&Tini);
                 signal(SIGALRM, fbhandler);
-                flag_fb = 0;
                 alarm(1);
             }
             
@@ -663,11 +665,13 @@ int main(int argc, char* argv[])
                 
                 if(flag_fb)
                 {
-                    time(&Tnow);
+                    Tnow = time(NULL);
                     dT = difftime(Tnow, Tini);
-                    printf("\r> %.2f%% - %02d:%02d:%02d ",
-                                100.*ii/ni, dT/3600, (dT/60)%60, dT%60);
+                    
+                    printf("\r> %.2f%%", 100.*ii/ni);
+                    printf(" - %02d:%02d:%02d ", dT/3600, (dT/60)%60, dT%60);
                     fflush(stdout);
+                    
                     flag_fb = 0;
                     alarm(1);
                 }
@@ -849,10 +853,11 @@ int main(int argc, char* argv[])
             {
                 signal(SIGALRM, SIG_IGN);
                 
-                time(&Tnow);
+                Tnow = time(NULL);
                 dT = difftime(Tnow, Tini);
-                printf("\r> done with %zu pairs in %02d:%02d:%02d  \n",
-                                            nn, dT/3600, (dT/60)%60, dT%60);
+                
+                printf("\r> done with %zu pairs", nn);
+                printf(" in %02d:%02d:%02d  \n", dT/3600, (dT/60)%60, dT%60);
                 printf("\n");
             }
         }
