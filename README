@@ -1,10 +1,10 @@
 2pcf: fast exact two-point correlation function code
 ----------------------------------------------------
 
-The 2pcf code computes the two-point correlation function for points or spin-n
-random fields from all available pairs with the help of a semi-tree code (pairs
-are selected using a tree, but individual pairs -- and not leaf nodes -- are
-correlated).
+The 2pcf code computes the two-point correlation function for point data and
+real or complex spin-n random fields from all available pairs of observations
+with the help of a semi-tree code (pairs are selected using a tree, but pairs
+-- and not leaf nodes -- are correlated).
 
 The code is controlled via a configuration file, and examples are provided.
 

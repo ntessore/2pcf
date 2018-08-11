@@ -25,6 +25,7 @@
 enum { MODE_NONE, MODE_POINTS, MODE_FIELD };
 enum { SPACING_LIN, SPACING_LOG };
 enum { COORDS_FLAT, COORDS_RADEC };
+enum { FIELD_REAL, FIELD_COMPLEX };
 
 enum {
     UNIT_RAD,
@@ -147,7 +148,7 @@ void tree_free(node* t)
     }
 }
 
-static double* readc(const char* f, int m, double ui, bool rd, size_t* n)
+double* readc(const char* f, double ui, bool rd, bool pt, bool cf, size_t* n)
 {
     FILE* fp;
     int l;
@@ -182,16 +183,8 @@ static double* readc(const char* f, int m, double ui, bool rd, size_t* n)
     {
         sx = strtok(buf, " \t\r\n");
         sy = strtok(NULL, " \t\r\n");
-        if(m == MODE_FIELD)
-        {
-            su = strtok(NULL, " \t\r\n");
-            sv = strtok(NULL, " \t\r\n");
-        }
-        else
-        {
-            su = NULL;
-            sv = NULL;
-        }
+        su = !pt ? strtok(NULL, " \t\r\n") : NULL;
+        sv = !pt && cf ? strtok(NULL, " \t\r\n") : NULL;
         sw = strtok(NULL, " \t\r\n");
         
         if(!sx || *sx == '#')
@@ -206,20 +199,28 @@ static double* readc(const char* f, int m, double ui, bool rd, size_t* n)
         x = atof(sx)*ui;
         y = atof(sy)*ui;
         
-        if(m == MODE_FIELD)
+        if(!pt)
         {
             if(!su || *su == '#')
             {
                 fprintf(stderr, "error: %s:%d: missing `u` value\n", f, l);
                 exit(EXIT_FAILURE);
             }
-            if(!sv || *sv == '#')
-            {
-                fprintf(stderr, "error: %s:%d: missing `v` value\n", f, l);
-                exit(EXIT_FAILURE);
-            }
+            
             u = atof(su);
-            v = atof(sv);
+            
+            if(cf)
+            {
+                if(!sv || *sv == '#')
+                {
+                    fprintf(stderr, "error: %s:%d: missing `v` value\n", f, l);
+                    exit(EXIT_FAILURE);
+                }
+                
+                v = atof(sv);
+            }
+            else
+                v = 0;
         }
         else
         {
@@ -295,6 +296,8 @@ int main(int argc, char* argv[])
         char catalog2[LINELEN];
         int dunit;
         int coords;
+        int field1;
+        int field2;
         int spin1;
         int spin2;
         char output[LINELEN];
@@ -388,6 +391,33 @@ int main(int argc, char* argv[])
             else
                 goto err_cfg_bad_value;
         }
+        else if(strcmp(key, "field") == 0)
+        {
+            if(strcmp(val, "real") == 0)
+                cfg.field1 = FIELD_REAL;
+            else if(strcmp(val, "complex") == 0)
+                cfg.field1 = FIELD_COMPLEX;
+            else
+                goto err_cfg_bad_value;
+        }
+        else if(strcmp(key, "field1") == 0)
+        {
+            if(strcmp(val, "real") == 0)
+                cfg.field1 = FIELD_REAL;
+            else if(strcmp(val, "complex") == 0)
+                cfg.field1 = FIELD_COMPLEX;
+            else
+                goto err_cfg_bad_value;
+        }
+        else if(strcmp(key, "field2") == 0)
+        {
+            if(strcmp(val, "real") == 0)
+                cfg.field2 = FIELD_REAL;
+            else if(strcmp(val, "complex") == 0)
+                cfg.field2 = FIELD_COMPLEX;
+            else
+                goto err_cfg_bad_value;
+        }
         else if(strcmp(key, "spin") == 0)
             cfg.spin1 = atoi(val) + 1;
         else if(strcmp(key, "spin1") == 0)
@@ -442,6 +472,11 @@ int main(int argc, char* argv[])
     
     if(!cfg.leafpts)
         cfg.leafpts = 8;
+    
+    if(cfg.spin1)
+        cfg.field1 = FIELD_COMPLEX;
+    if(cfg.spin2 || cfg.spin1)
+        cfg.field2 = FIELD_COMPLEX;
     
     pt = cfg.mode == MODE_POINTS;
     xc = !!strlen(cfg.catalog2);
@@ -498,11 +533,22 @@ int main(int argc, char* argv[])
     if(!pt)
     {
         if(!xc)
-            printf("field spin ...... %d\n", S1);
+        {
+            if(cfg.field1)
+                printf("field type ...... complex spin-%d\n", S1);
+            else
+                printf("field type ...... real\n");
+        }
         else
         {
-            printf("field 1 spin .... %d\n", S1);
-            printf("field 2 spin .... %d\n", S2);
+            if(cfg.field1)
+                printf("field 1 type .... complex spin-%d\n", S1);
+            else
+                printf("field 1 type .... real\n");
+            if(cfg.field2)
+                printf("field 2 type .... complex spin-%d\n", S2);
+            else
+                printf("field 2 type .... real\n");
         }
     }
     printf("\n");
@@ -517,7 +563,7 @@ int main(int argc, char* argv[])
     
     printf("reading %s\n", pt ? "data catalog" : xc ? "catalog 1" : "catalog");
     
-    c1 = readc(cfg.catalog1, cfg.mode, ui, rd, &n1);
+    c1 = readc(cfg.catalog1, ui, rd, pt, cfg.field1, &n1);
     if(!c1)
     {
         fprintf(stderr, "error: could not read %s\n", cfg.catalog1);
@@ -538,7 +584,7 @@ int main(int argc, char* argv[])
     {
         printf("reading %s\n", pt ? "random catalog" : "catalog 2");
         
-        c2 = readc(cfg.catalog2, cfg.mode, ui, rd, &n2);
+        c2 = readc(cfg.catalog2, ui, rd, pt, cfg.field2, &n2);
         if(!c2)
         {
             fprintf(stderr, "error: could not read %s\n", cfg.catalog2);
