@@ -270,13 +270,13 @@ static double* readc(const char* f, int m, double ui, bool rd, size_t* n)
     return d;
 }
 
-volatile sig_atomic_t flag_fb;
+volatile sig_atomic_t fb;
 
-#pragma omp threadprivate(flag_fb)
+#pragma omp threadprivate(fb)
 
 void fbhandler(int s)
 {
-    flag_fb = 1;
+    fb = 1;
 }
 
 int main(int argc, char* argv[])
@@ -610,8 +610,8 @@ int main(int argc, char* argv[])
             private(i, j, nj) firstprivate(pt, xc, rd, ls, nd, dl, dh, d0, \
                 dm, sdh, p, ni, ci, cj, tj, stdout)
         {
-            time_t Tini, Tnow;
-            int dT;
+            time_t st;
+            int dt;
             
             size_t tn, ta;
             node** tl;
@@ -647,9 +647,9 @@ int main(int argc, char* argv[])
                 abort();
             }
             
-            flag_fb = 0;
-            Tini = Tnow = time(NULL);
-            dT = 0;
+            fb = 0;
+            st = time(NULL);
+            dt = 0;
             
             #pragma omp master
             {
@@ -663,16 +663,15 @@ int main(int argc, char* argv[])
                 #pragma omp atomic
                 ii += 1;
                 
-                if(flag_fb)
+                if(fb)
                 {
-                    Tnow = time(NULL);
-                    dT = difftime(Tnow, Tini);
+                    dt = difftime(time(NULL), st);
                     
                     printf("\r> %.2f%%", 100.*ii/ni);
-                    printf(" - %02d:%02d:%02d ", dT/3600, (dT/60)%60, dT%60);
+                    printf(" - %02d:%02d:%02d ", dt/3600, (dt/60)%60, dt%60);
                     fflush(stdout);
                     
-                    flag_fb = 0;
+                    fb = 0;
                     alarm(1);
                 }
                 
@@ -838,12 +837,12 @@ int main(int argc, char* argv[])
             #pragma omp master
             {
                 signal(SIGALRM, SIG_IGN);
+                alarm(0);
                 
-                Tnow = time(NULL);
-                dT = difftime(Tnow, Tini);
+                dt = difftime(time(NULL), st);
                 
                 printf("\r> done with %zu pairs", nn);
-                printf(" in %02d:%02d:%02d  \n", dT/3600, (dT/60)%60, dT%60);
+                printf(" in %02d:%02d:%02d  \n", dt/3600, (dt/60)%60, dt%60);
                 printf("\n");
             }
         }
