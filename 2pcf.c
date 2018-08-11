@@ -68,10 +68,9 @@ int cmp1(const void* a, const void* b)
 }
 
 typedef struct node {
-    size_t i;
-    size_t n;
-    double x[2];
-    double y[2];
+    size_t i, n;
+    double xl, xh;
+    double yl, yh;
     struct node* l;
     struct node* r;
 } node;
@@ -99,26 +98,26 @@ node* tree(double* p, size_t i, size_t n, int d, size_t s, size_t* c)
     
     if(d & 1)
     {
-        t->x[0] = p[i*DW];
-        t->x[1] = p[(n-1)*DW];
+        t->xl = p[i*DW+0];
+        t->xh = p[(n-1)*DW+0];
     }
     else
     {
-        t->y[0] = p[i*DW+1];
-        t->y[1] = p[(n-1)*DW+1];
+        t->yl = p[i*DW+1];
+        t->yh = p[(n-1)*DW+1];
     }
     
-    qsort(p+i*DW, n-i, DW*sizeof(double), d%2 ? cmp1 : cmp0);
+    qsort(p+i*DW, n-i, DW*sizeof(double), d & 1 ? cmp1 : cmp0);
     
     if(d & 1)
     {
-        t->y[0] = p[i*DW+1];
-        t->y[1] = p[(n-1)*DW+1];
+        t->yl = p[i*DW+1];
+        t->yh = p[(n-1)*DW+1];
     }
     else
     {
-        t->x[0] = p[i*DW];
-        t->x[1] = p[(n-1)*DW];
+        t->xl = p[i*DW+0];
+        t->xh = p[(n-1)*DW+0];
     }
     
     if(n-i > s)
@@ -619,7 +618,8 @@ int main(int argc, char* argv[])
             
             double xi, yi, ui, vi, wi, sxi, cxi, syi, cyi;
             double xj, yj, uj, vj, wj, sxj, cxj, syj, cyj, sdx, cdx;
-            double xk, yk, dx, xl, xh;
+            double xl, xh, yl, yh, dx;
+            
             double d;
             int n;
             
@@ -693,12 +693,12 @@ int main(int argc, char* argv[])
                     if(!xc && tl[tn-1]->n <= i+1)
                         continue;
                     
-                    xj = tl[tn-1]->x[0];
-                    yj = tl[tn-1]->y[0];
-                    xk = tl[tn-1]->x[1];
-                    yk = tl[tn-1]->y[1];
+                    xl = tl[tn-1]->xl;
+                    xh = tl[tn-1]->xh;
+                    yl = tl[tn-1]->yl;
+                    yh = tl[tn-1]->yh;
                     
-                    if(yj - yi >= dh || yi - yk >= dh)
+                    if(yi - dh >= yh || yi + dh <= yl)
                         continue;
                     
                     if(rd)
@@ -706,28 +706,14 @@ int main(int argc, char* argv[])
                         if(cyi > sdh)
                         {
                             dx = asin(sdh/cyi);
-                            xl = xi - dx;
-                            xh = xi + dx;
-                            if(xl < 0)
-                            {
-                                if(xl + TWO_PI >= xk && xh <= xj)
-                                    continue;
-                            }
-                            else if(xh > TWO_PI)
-                            {
-                                if(xl >= xk && xh - TWO_PI <= xj)
-                                    continue;
-                            }
-                            else
-                            {
-                                if(xl >= xk || xh <= xj)
-                                    continue;
-                            }
+                            if((xi - dx >= xh && xi + dx - TWO_PI <= xl) ||
+                                    (xi + dx <= xl && xi - dx + TWO_PI >= xh))
+                                continue;
                         }
                     }
                     else
                     {
-                        if(xj - xi >= dh || xi - xk >= dh)
+                        if(xi - dh >= xh || xi + dh <= xl)
                             continue;
                     }
                     
