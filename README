@@ -1,5 +1,5 @@
-2pcf: two-point correlation function semi-tree code
----------------------------------------------------
+2pcf: fast exact two-point correlation function code
+----------------------------------------------------
 
 The 2pcf code computes the two-point correlation function for points or fields
 from all available pairs with the help of a semi-tree code (pairs are selected
