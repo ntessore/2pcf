@@ -667,7 +667,7 @@ int main(int argc, char* argv[])
     }
     
     W = calloc(3*nd, sizeof(double));
-    X = calloc(3*nd, sizeof(double));
+    X = calloc(4*nd, sizeof(double));
     if(!W || !X)
     {
         perror(NULL);
@@ -758,7 +758,7 @@ int main(int argc, char* argv[])
             double ww, uu, uv, vu, vv;
             double sij, cij, sji, cji;
             double sp, cp, sm, cm;
-            double xip, xim, xix;
+            double xip_re, xip_im, xim_re, xim_im;
             
             double* Wi;
             double* Xi;
@@ -772,7 +772,7 @@ int main(int argc, char* argv[])
             }
             
             Wi = calloc(3*nd, sizeof(double));
-            Xi = calloc(3*nd, sizeof(double));
+            Xi = calloc(4*nd, sizeof(double));
             if(!Wi || !Xi)
             {
                 perror(NULL);
@@ -921,10 +921,10 @@ int main(int argc, char* argv[])
                             }
                             else
                             {
-                                cij = xj - xi;
-                                sij = yj - yi;
-                                cji = xi - xj;
-                                sji = yi - yj;
+                                cij = yj - yi;
+                                sij = xj - xi;
+                                cji = yi - yj;
+                                sji = xi - xj;
                             }
                             
                             nsincos(Si, cij, sij, &sij, &cij);
@@ -935,13 +935,15 @@ int main(int argc, char* argv[])
                             cm = cij*cji - sij*sji;
                             sm = sij*cji + cij*sji;
                             
-                            xip = (uu + vv)*cp - (uv - vu)*sp;
-                            xim = (uu - vv)*cm - (uv + vu)*sm;
-                            xix = (uv + vu)*cm + (uu - vv)*sm;
+                            xip_re = (uu + vv)*cp - (uv - vu)*sp;
+                            xip_im = (uv - vu)*cp + (uu + vv)*sp;
+                            xim_re = (uu - vv)*cm - (uv + vu)*sm;
+                            xim_im = (uv + vu)*cm + (uu - vv)*sm;
                             
-                            Xi[0*nd+n] += ww*xip;
-                            Xi[1*nd+n] += ww*xim;
-                            Xi[2*nd+n] += ww*xix;
+                            Xi[0*nd+n] += ww*xip_re;
+                            Xi[1*nd+n] += ww*xim_re;
+                            Xi[2*nd+n] += ww*xip_im;
+                            Xi[3*nd+n] += ww*xim_im;
                         }
                         
                         Wi[p*nd+n] += ww;
@@ -953,10 +955,13 @@ int main(int argc, char* argv[])
             }
             
             #pragma omp critical
-            for(i = 0; i < 3*nd; ++i)
+            for(i = 0; i < nd; ++i)
             {
-                W[i] += Wi[i];
-                X[i] += Xi[i];
+                W[p*nd+i] += Wi[p*nd+i];
+                X[0*nd+i] += Xi[0*nd+i];
+                X[1*nd+i] += Xi[1*nd+i];
+                X[2*nd+i] += Xi[2*nd+i];
+                X[3*nd+i] += Xi[3*nd+i];
             }
             
             free(tl);
@@ -988,7 +993,7 @@ int main(int argc, char* argv[])
     if(pt)
         fprintf(fp, "# theta w\n");
     else
-        fprintf(fp, "# theta xip xim xix\n");
+        fprintf(fp, "# theta xip xim xip_im xim_im\n");
     
     for(i = 0; i < nd; ++i)
     {
@@ -1016,14 +1021,16 @@ int main(int argc, char* argv[])
         }
         else
         {
-            double nor, xip, xim, xix;
+            double nor, xip_re, xim_re, xip_im, xim_im;
             
             nor = W[i];
-            xip = X[0*nd+i]/nor;
-            xim = X[1*nd+i]/nor;
-            xix = X[2*nd+i]/nor;
+            xip_re = X[0*nd+i]/nor;
+            xim_re = X[1*nd+i]/nor;
+            xip_im = X[2*nd+i]/nor;
+            xim_im = X[3*nd+i]/nor;
             
-            fprintf(fp, "%.18e %.18e %.18e %.18e\n", d, xip, xim, xix);
+            fprintf(fp, "%.18e %.18e %.18e %.18e %.18e\n", d, xip_re,
+                                                    xim_re, xip_im, xim_im);
         }
     }
     
