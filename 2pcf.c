@@ -238,10 +238,10 @@ double* readc(const char* f, double ui, bool rd, bool pt, bool cf, size_t* n)
         d[i*DW+2] = u;
         d[i*DW+3] = v;
         d[i*DW+4] = w;
-        d[i*DW+5] = sin(x);
-        d[i*DW+6] = cos(x);
-        d[i*DW+7] = sin(y);
-        d[i*DW+8] = cos(y);
+        d[i*DW+5] = rd ? sin(x) : 0;
+        d[i*DW+6] = rd ? cos(x) : 0;
+        d[i*DW+7] = rd ? sin(y) : 0;
+        d[i*DW+8] = rd ? cos(y) : 0;
         
         i += 1;
         
@@ -277,7 +277,7 @@ volatile sig_atomic_t fb;
 
 void fbhandler(int s)
 {
-    fb = 1;
+    fb = s;
 }
 
 int main(int argc, char* argv[])
@@ -310,7 +310,7 @@ int main(int argc, char* argv[])
     } cfg;
     
     bool pt, xc, ls, rd;
-    int nd;
+    size_t nd;
     double dl, dh, sdh, dm, d0;
     double ui, uo;
     int S1, S2;
@@ -981,11 +981,11 @@ int main(int argc, char* argv[])
     else
         fprintf(fp, "# theta xip xim xix\n");
     
-    for(int n = 0; n < nd; ++n)
+    for(i = 0; i < nd; ++i)
     {
         double d;
         
-        d = d0 + (n + 0.5)/dm;
+        d = d0 + (i + 0.5)/dm;
         if(ls)
             d = exp(d);
         d /= uo;
@@ -999,19 +999,20 @@ int main(int argc, char* argv[])
             ndr = n1*n2;
             nrr = n2*(n2-1)/2;
             
-            dd = W[0*nd+n]/ndd;
-            dr = W[1*nd+n]/ndr;
-            rr = W[2*nd+n]/nrr;
+            dd = W[0*nd+i]/ndd;
+            dr = W[1*nd+i]/ndr;
+            rr = W[2*nd+i]/nrr;
             
             fprintf(fp, "%.18e %.18e\n", d, (dd - 2*dr + rr)/rr);
         }
         else
         {
-            double xip, xim, xix;
+            double nor, xip, xim, xix;
             
-            xip = X[0*nd+n]/W[n];
-            xim = X[1*nd+n]/W[n];
-            xix = X[2*nd+n]/W[n];
+            nor = W[i];
+            xip = X[0*nd+i]/nor;
+            xim = X[1*nd+i]/nor;
+            xix = X[2*nd+i]/nor;
             
             fprintf(fp, "%.18e %.18e %.18e %.18e\n", d, xip, xim, xix);
         }

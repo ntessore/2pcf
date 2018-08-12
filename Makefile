@@ -1,6 +1,6 @@
 -include local.mk
 
-CFLAGS += -std=c99 -Wall -Werror -Wno-unknown-pragmas -pedantic
+CFLAGS += -std=c99 -Wall -Wextra -Werror -Wno-unknown-pragmas -pedantic
 LDFLAGS += 
 LDLIBS += -lm
 
