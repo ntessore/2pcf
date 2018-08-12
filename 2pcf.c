@@ -54,6 +54,53 @@ static const double TWO_PI = 6.2831853071795864769;
 
 static const int DW = 9;
 
+static double clamp(double x, double xl, double xh)
+{
+  const double y = x < xl ? xl : x;
+  return y > xh ? xh : y;
+}
+
+static void nsincos(int n, double x, double y, double* s, double* c)
+{
+    double h;
+    
+    switch(n)
+    {
+    case 0:
+        *c = 1;
+        *s = 0;
+        return;
+        
+    case 1:
+        h = hypot(x, y);
+        *c = x/h;
+        *s = y/h;
+        return;
+        
+    case 2:
+        h = x*x + y*y;
+        *c = (x*x - y*y)/h;
+        *s = (2*x*y)/h;
+        return;
+        
+    default:
+        h = hypot(x, y);
+        x = x/h;
+        y = y/h;
+        *c = x*x - y*y;
+        *s = 2*x*y;
+        for(int i = 2; i < n; ++i)
+        {
+            const double k1 = x*(*c + *s);
+            const double k2 = (x + y)*(*s);
+            const double k3 = (y - x)*(*c);
+            *c = k1 - k2;
+            *s = k1 + k3;
+        }
+        return;
+    }
+}
+
 int cmp0(const void* a, const void* b)
 {
     const double* x = a;
@@ -419,11 +466,23 @@ int main(int argc, char* argv[])
                 goto err_cfg_bad_value;
         }
         else if(strcmp(key, "spin") == 0)
+        {
             cfg.spin1 = atoi(val) + 1;
+            if(cfg.spin1 < 1)
+                goto err_cfg_bad_value;
+        }
         else if(strcmp(key, "spin1") == 0)
+        {
             cfg.spin1 = atoi(val) + 1;
+            if(cfg.spin1 < 1)
+                goto err_cfg_bad_value;
+        }
         else if(strcmp(key, "spin2") == 0)
+        {
             cfg.spin2 = atoi(val) + 1;
+            if(cfg.spin2 < 1)
+                goto err_cfg_bad_value;
+        }
         else if(strcmp(key, "output") == 0)
             strncpy(cfg.output, val, sizeof cfg.output);
         else if(strcmp(key, "nth") == 0)
@@ -696,8 +755,8 @@ int main(int argc, char* argv[])
             double d;
             int n;
             
-            double a, b, h, sij, cij, sji, cji;
             double ww, uu, uv, vu, vv;
+            double sij, cij, sji, cji;
             double sp, cp, sm, cm;
             double xip, xim, xix;
             
@@ -832,7 +891,7 @@ int main(int argc, char* argv[])
                         cdx = cxi*cxj + sxi*sxj;
                         
                         if(rd)
-                            d = acos(fmax(-1, fmin(1, syi*syj + cyi*cyj*cdx)));
+                            d = acos(clamp(syi*syj + cyi*cyj*cdx, -1, 1));
                         else
                             d = hypot(xj - xi, yj - yi);
                         
@@ -848,78 +907,28 @@ int main(int argc, char* argv[])
                         
                         if(!pt)
                         {
-                            if(Si > 0)
-                            {
-                                if(rd)
-                                {
-                                    a = cyi*syj - syi*cyj*cdx;
-                                    b = cyj*sdx;
-                                }
-                                else
-                                {
-                                    a = xj - xi;
-                                    b = yj - yi;
-                                }
-                                
-                                h = hypot(a, b);
-                                a = a/h;
-                                b = b/h;
-                                
-                                cij = a;
-                                sij = b;
-                                for(int k = 1; k < Si; ++k)
-                                {
-                                    const double k1 = a*(cij + sij);
-                                    const double k2 = (a + b)*sij;
-                                    const double k3 = (b - a)*cij;
-                                    cij = k1 - k2;
-                                    sij = k1 + k3;
-                                }
-                            }
-                            else
-                            {
-                                cij = 1;
-                                sij = 0;
-                            }
-                            
-                            if(Sj > 0)
-                            {
-                                if(rd)
-                                {
-                                    a = cyj*syi - syj*cyi*cdx;
-                                    b = -cyi*sdx;
-                                }
-                                else
-                                {
-                                    a = xi - xj;
-                                    b = yi - yj;
-                                }
-                                
-                                h = hypot(a, b);
-                                a = a/h;
-                                b = b/h;
-                                
-                                cji = a;
-                                sji = b;
-                                for(int k = 1; k < Sj; ++k)
-                                {
-                                    const double k1 = a*(cji + sji);
-                                    const double k2 = (a + b)*sji;
-                                    const double k3 = (b - a)*cji;
-                                    cji = k1 - k2;
-                                    sji = k1 + k3;
-                                }
-                            }
-                            else
-                            {
-                                cji = 1;
-                                sji = 0;
-                            }
-                            
                             uu = ui*uj;
                             uv = ui*vj;
                             vu = vi*uj;
                             vv = vi*vj;
+                            
+                            if(rd)
+                            {
+                                cij = cyi*syj - syi*cyj*cdx;
+                                sij = cyj*sdx;
+                                cji = cyj*syi - syj*cyi*cdx;
+                                sji = -cyi*sdx;
+                            }
+                            else
+                            {
+                                cij = xj - xi;
+                                sij = yj - yi;
+                                cji = xi - xj;
+                                sji = yi - yj;
+                            }
+                            
+                            nsincos(Si, cij, sij, &sij, &cij);
+                            nsincos(Sj, cji, sji, &sji, &cji);
                             
                             cp = cij*cji + sij*sji;
                             sp = sij*cji - cij*sji;
