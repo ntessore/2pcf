@@ -771,7 +771,7 @@ int main(int argc, char* argv[])
                 abort();
             }
             
-            Wi = calloc(3*nd, sizeof(double));
+            Wi = calloc(nd, sizeof(double));
             Xi = calloc(4*nd, sizeof(double));
             if(!Wi || !Xi)
             {
@@ -905,6 +905,8 @@ int main(int argc, char* argv[])
                         
                         ww = wi*wj;
                         
+                        Wi[n] += ww;
+                        
                         if(!pt)
                         {
                             uu = ui*uj;
@@ -946,8 +948,6 @@ int main(int argc, char* argv[])
                             Xi[3*nd+n] += ww*xim_im;
                         }
                         
-                        Wi[p*nd+n] += ww;
-                        
                         #pragma omp atomic
                         nn += 1;
                     }
@@ -957,7 +957,7 @@ int main(int argc, char* argv[])
             #pragma omp critical
             for(i = 0; i < nd; ++i)
             {
-                W[p*nd+i] += Wi[p*nd+i];
+                W[p*nd+i] += Wi[i];
                 X[0*nd+i] += Xi[0*nd+i];
                 X[1*nd+i] += Xi[1*nd+i];
                 X[2*nd+i] += Xi[2*nd+i];
@@ -993,7 +993,8 @@ int main(int argc, char* argv[])
     if(pt)
         fprintf(fp, "# theta w\n");
     else
-        fprintf(fp, "# theta xip xim xip_im xim_im\n");
+        fprintf(fp, "%-25s %-25s %-25s %-25s %-25s\n",
+                                "# theta", "xip", "xim", "xip_im", "xim_im");
     
     for(i = 0; i < nd; ++i)
     {
@@ -1023,14 +1024,14 @@ int main(int argc, char* argv[])
         {
             double nor, xip_re, xim_re, xip_im, xim_im;
             
-            nor = W[i];
+            nor = W[i] ? W[i] : 1;
             xip_re = X[0*nd+i]/nor;
             xim_re = X[1*nd+i]/nor;
             xip_im = X[2*nd+i]/nor;
             xim_im = X[3*nd+i]/nor;
             
-            fprintf(fp, "%.18e %.18e %.18e %.18e %.18e\n", d, xip_re,
-                                                    xim_re, xip_im, xim_im);
+            fprintf(fp, "% .18e % .18e % .18e % .18e % .18e\n",
+                                        d, xip_re, xim_re, xip_im, xim_im);
         }
     }
     
