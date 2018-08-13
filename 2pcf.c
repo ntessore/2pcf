@@ -56,8 +56,8 @@ static const int DW = 9;
 
 static double clamp(double x, double xl, double xh)
 {
-  const double y = x < xl ? xl : x;
-  return y > xh ? xh : y;
+    const double y = x < xl ? xl : x;
+    return y > xh ? xh : y;
 }
 
 static void nsincos(int n, double x, double y, double* s, double* c)
@@ -374,6 +374,8 @@ int main(int argc, char* argv[])
     double* X;
     
     int p, np;
+    time_t st;
+    int dt;
     size_t ni, nj, ii;
     double* ci;
     double* cj;
@@ -735,16 +737,17 @@ int main(int argc, char* argv[])
             Sj = xc ? S2 : S1;
         }
         
+        st = time(NULL);
+        dt = 0;
+        fb = 0;
+        
         ii = 0;
         nn = 0;
         
-        #pragma omp parallel default(none) shared(ii, nn, W, X) \
+        #pragma omp parallel default(none) shared(st, dt, ii, nn, W, X) \
             private(i, j, nj) firstprivate(pt, xc, rd, ls, nd, dl, dh, d0, \
                 dm, sdh, p, ni, ci, cj, tj, Si, Sj, stdout)
         {
-            time_t st;
-            int dt;
-            
             size_t tn, ta;
             node** tl;
             
@@ -778,10 +781,6 @@ int main(int argc, char* argv[])
                 perror(NULL);
                 abort();
             }
-            
-            fb = 0;
-            st = time(NULL);
-            dt = 0;
             
             #pragma omp master
             {
@@ -967,20 +966,13 @@ int main(int argc, char* argv[])
             free(tl);
             free(Wi);
             free(Xi);
-            
-            #pragma omp barrier
-            #pragma omp master
-            {
-                signal(SIGALRM, SIG_IGN);
-                alarm(0);
-                
-                dt = difftime(time(NULL), st);
-                
-                printf("\r> done with %zu pairs", nn);
-                printf(" in %02d:%02d:%02d  \n", dt/3600, (dt/60)%60, dt%60);
-                printf("\n");
-            }
         }
+        
+        dt = difftime(time(NULL), st);
+        
+        printf("\r> done with %zu pairs", nn);
+        printf(" in %02d:%02d:%02d  \n", dt/3600, (dt/60)%60, dt%60);
+        printf("\n");
     }
     
     fp = fopen(cfg.output, "w");
