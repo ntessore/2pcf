@@ -54,12 +54,6 @@ static const double TWO_PI = 6.2831853071795864769;
 
 static const int DW = 9;
 
-static double clamp(double x, double xl, double xh)
-{
-    const double y = x < xl ? xl : x;
-    return y > xh ? xh : y;
-}
-
 static void nsincos(int n, double x, double y, double* s, double* c)
 {
     double h;
@@ -358,7 +352,7 @@ int main(int argc, char* argv[])
     
     bool pt, xc, ls, rd;
     size_t nd;
-    double dl, dh, sdh, dm, d0;
+    double dl, dh, sdh, dL, dH, dm, d0;
     double ui, uo;
     int S1, S2;
     
@@ -559,6 +553,16 @@ int main(int argc, char* argv[])
     
     sdh = sin(dh);
     
+    dL = dl;
+    dH = dh;
+    if(rd)
+    {
+        dL = 2*sin(0.5*dL);
+        dH = 2*sin(0.5*dH);
+    }
+    dL = dL*dL;
+    dH = dH*dH;
+    
     if(ls)
     {
         d0 = log(dl);
@@ -745,8 +749,8 @@ int main(int argc, char* argv[])
         nn = 0;
         
         #pragma omp parallel default(none) shared(st, dt, ii, nn, W, X) \
-            private(i, j, nj) firstprivate(pt, xc, rd, ls, nd, dl, dh, d0, \
-                dm, sdh, p, ni, ci, cj, tj, Si, Sj, stdout)
+            private(i, j, nj) firstprivate(pt, xc, rd, ls, nd, dh, dL, dH, \
+                d0, dm, sdh, p, ni, ci, cj, tj, Si, Sj, stdout)
         {
             size_t tn, ta;
             node** tl;
@@ -755,7 +759,7 @@ int main(int argc, char* argv[])
             double xj, yj, uj, vj, wj, sxj, cxj, syj, cyj, sdx, cdx;
             double xl, xh, yl, yh, dx;
             
-            double d;
+            double d1, d2, d3, d;
             int n;
             
             double ww, uu, uv, vu, vv;
@@ -890,13 +894,25 @@ int main(int argc, char* argv[])
                         cdx = cxi*cxj + sxi*sxj;
                         
                         if(rd)
-                            d = acos(clamp(syi*syj + cyi*cyj*cdx, -1, 1));
+                        {
+                            d1 = syj - syi;
+                            d2 = cdx*cyi - cyj;
+                            d3 = sdx*cyi;
+                            d = d1*d1 + d2*d2 + d3*d3;
+                        }
                         else
-                            d = hypot(xj - xi, yj - yi);
+                        {
+                            d1 = xj - xi;
+                            d2 = yj - yi;
+                            d = d1*d1 + d2*d2;
+                        }
                         
-                        if(d < dl || d >= dh)
+                        if(d < dL || d >= dH)
                             continue;
                         
+                        d = sqrt(d);
+                        if(rd)
+                            d = 2*asin(0.5*d);
                         if(ls)
                             d = log(d);
                         
