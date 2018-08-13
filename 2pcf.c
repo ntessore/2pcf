@@ -1082,7 +1082,8 @@ int main(int argc, char* argv[])
     }
     
     if(pt)
-        fprintf(fp, "# theta w\n");
+        fprintf(fp, "%-25s %-25s %-25s %-25s %-25s\n",
+                                        "# theta", "xi", "DD", "DR", "RR");
     else
         fprintf(fp, "%-25s %-25s %-25s %-25s %-25s\n",
                                 "# theta", "xip", "xim", "xip_im", "xim_im");
@@ -1099,7 +1100,7 @@ int main(int argc, char* argv[])
         if(pt)
         {
             size_t ndd, ndr, nrr;
-            double dd, dr, rr;
+            double dd, dr, rr, xi;
             
             ndd = n1*(n1-1)/2;
             ndr = n1*n2;
@@ -1109,7 +1110,10 @@ int main(int argc, char* argv[])
             dr = W[1*nd+i]/ndr;
             rr = W[2*nd+i]/nrr;
             
-            fprintf(fp, "%.18e %.18e\n", d, (dd - 2*dr + rr)/rr);
+            xi = (dd - 2*dr + rr)/rr;
+            
+            fprintf(fp, "% .18e % .18e % .18e % .18e % .18e \n",
+                                                        d, xi, dd, dr, rr);
         }
         else
         {
