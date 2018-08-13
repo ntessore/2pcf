@@ -227,12 +227,14 @@ data* readc(const char* f, double ui, bool rd, bool pt, bool cf, size_t* n)
 }
 
 volatile sig_atomic_t fb;
+volatile sig_atomic_t qQ;
 
 #pragma omp threadprivate(fb)
 
-void fbhandler(int s)
+void handler(int s)
 {
-    fb = s;
+    fb = (s == SIGALRM);
+    qQ = (s == SIGQUIT);
 }
 
 int mapsort(const void* a, const void* b)
@@ -804,7 +806,10 @@ int main(int argc, char* argv[])
         abort();
     }
     
-    for(p = 0, np = pt ? 3 : 1; p < np; ++p)
+    signal(SIGQUIT, handler);
+    qQ = 0;
+    
+    for(p = 0, np = pt ? 3 : 1; p < np && !qQ; ++p)
     {
         if(pt)
         {
@@ -911,7 +916,7 @@ int main(int argc, char* argv[])
             
             #pragma omp master
             {
-                signal(SIGALRM, fbhandler);
+                signal(SIGALRM, handler);
                 alarm(1);
             }
             
@@ -920,6 +925,9 @@ int main(int argc, char* argv[])
             #pragma omp for schedule(static, 1) nowait
             for(i = 0; i < ni; ++i)
             {
+                if(qQ)
+                    continue;
+                
                 #pragma omp atomic
                 ii += 1;
                 
@@ -1050,6 +1058,11 @@ int main(int argc, char* argv[])
                         nn += 1;
                     }
                 }
+            }
+            
+            #pragma omp master
+            {
+                signal(SIGALRM, SIG_IGN);
             }
             
             #pragma omp critical
