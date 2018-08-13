@@ -1,5 +1,5 @@
-// 2pcf: two-point correlation function semi-tree code
-// ---------------------------------------------------
+// 2pcf: two-point correlation function code
+// ---
 // author:  Nicolas Tessore <nicolas.tessore@manchester.ac.uk>
 // date:    08 Aug 2018
 
@@ -50,9 +50,17 @@ const char* UNAME[NUM_UNITS] = {
     "arcsec"
 };
 
+static const double PI_HALF = 1.5707963267948966192;
 static const double TWO_PI = 6.2831853071795864769;
 
-static const int DW = 9;
+typedef struct {
+    size_t i;
+    double x, y;
+    double u, v;
+    double w;
+    double sx, cx;
+    double sy, cy;
+} data;
 
 static void nsincos(int n, double x, double y, double* s, double* c)
 {
@@ -95,107 +103,13 @@ static void nsincos(int n, double x, double y, double* s, double* c)
     }
 }
 
-int cmp0(const void* a, const void* b)
-{
-    const double* x = a;
-    const double* y = b;
-    return (x[0] > y[0]) - (x[0] < y[0]);
-}
-
-int cmp1(const void* a, const void* b)
-{
-    const double* x = a;
-    const double* y = b;
-    return (x[1] > y[1]) - (x[1] < y[1]);
-}
-
-typedef struct node {
-    size_t i, n;
-    double xl, xh;
-    double yl, yh;
-    struct node* l;
-    struct node* r;
-} node;
-
-node* tree(double* p, size_t i, size_t n, int d, size_t s, size_t* c)
-{
-    node* t;
-    
-    t = malloc(sizeof(node));
-    if(!t)
-    {
-        perror("tree()");
-        exit(EXIT_FAILURE);
-    }
-    
-    t->i = i;
-    t->n = n;
-    
-    if(d == 0)
-    {
-        if(c)
-            *c = 0;
-        qsort(p+i*DW, n-i, DW*sizeof(double), cmp1);
-    }
-    
-    if(d & 1)
-    {
-        t->xl = p[i*DW+0];
-        t->xh = p[(n-1)*DW+0];
-    }
-    else
-    {
-        t->yl = p[i*DW+1];
-        t->yh = p[(n-1)*DW+1];
-    }
-    
-    qsort(p+i*DW, n-i, DW*sizeof(double), d & 1 ? cmp1 : cmp0);
-    
-    if(d & 1)
-    {
-        t->yl = p[i*DW+1];
-        t->yh = p[(n-1)*DW+1];
-    }
-    else
-    {
-        t->xl = p[i*DW+0];
-        t->xh = p[(n-1)*DW+0];
-    }
-    
-    if(n-i > s)
-    {
-        t->l = tree(p, i, (i+n)/2, d+1, s, c);
-        t->r = tree(p, (i+n)/2, n, d+1, s, c);
-    }
-    else
-    {
-        t->l = NULL;
-        t->r = NULL;
-    }
-    
-    if(c)
-        *c += 1;
-    
-    return t;
-}
-
-void tree_free(node* t)
-{
-    if(t)
-    {
-        tree_free(t->l);
-        tree_free(t->r);
-        free(t);
-    }
-}
-
-double* readc(const char* f, double ui, bool rd, bool pt, bool cf, size_t* n)
+data* readc(const char* f, double ui, bool rd, bool pt, bool cf, size_t* n)
 {
     FILE* fp;
     int l;
     char buf[LINELEN];
     size_t i, a;
-    double* d;
+    data* d;
     char* sx;
     char* sy;
     char* su;
@@ -213,7 +127,7 @@ double* readc(const char* f, double ui, bool rd, bool pt, bool cf, size_t* n)
     i = 0;
     a = 1;
     
-    d = malloc(a*DW*sizeof(double));
+    d = malloc(a*sizeof(data));
     if(!d)
     {
         perror(NULL);
@@ -274,22 +188,22 @@ double* readc(const char* f, double ui, bool rd, bool pt, bool cf, size_t* n)
         else
             w = atof(sw);
         
-        d[i*DW+0] = x;
-        d[i*DW+1] = y;
-        d[i*DW+2] = u;
-        d[i*DW+3] = v;
-        d[i*DW+4] = w;
-        d[i*DW+5] = rd ? sin(x) : 0;
-        d[i*DW+6] = rd ? cos(x) : 0;
-        d[i*DW+7] = rd ? sin(y) : 0;
-        d[i*DW+8] = rd ? cos(y) : 0;
+        d[i].x  = x;
+        d[i].y  = y;
+        d[i].u  = u;
+        d[i].v  = v;
+        d[i].w  = w;
+        d[i].sx = rd ? sin(x) : 0;
+        d[i].cx = rd ? cos(x) : 0;
+        d[i].sy = rd ? sin(y) : 0;
+        d[i].cy = rd ? cos(y) : 0;
         
         i += 1;
         
         if(i == a)
         {
             a *= 2;
-            d = realloc(d, a*DW*sizeof(double));
+            d = realloc(d, a*sizeof(data));
             if(!d)
             {
                 perror(NULL);
@@ -300,7 +214,7 @@ double* readc(const char* f, double ui, bool rd, bool pt, bool cf, size_t* n)
     
     fclose(fp);
     
-    d = realloc(d, i*DW*sizeof(double));
+    d = realloc(d, i*sizeof(data));
     if(!d)
     {
         perror(NULL);
@@ -319,6 +233,101 @@ volatile sig_atomic_t fb;
 void fbhandler(int s)
 {
     fb = s;
+}
+
+int mapsort(const void* a, const void* b)
+{
+    const data* x = a;
+    const data* y = b;
+    
+    if(x->i < y->i)
+        return -1;
+    if(x->i > y->i)
+        return +1;
+    
+    if(x->x < y->x)
+        return -1;
+    if(x->x > y->x)
+        return +1;
+    
+    return 0;
+}
+
+int index(double x, double y, double dx, double dy, int w)
+{
+    return (int)(y/dy)*w + (int)(x/dx);
+}
+
+void query(int k, int w, int h, int dy, const int dx[], int* qc, int qv[])
+{
+    const int i0 = k/w;
+    const int il = i0 > dy ? i0-dy : 0;
+    const int ih = i0+dy < h ? i0+dy+1 : h;
+    
+    const int j = k%w;
+    
+    int r = 0, qb = -1;
+    
+    for(int i = il; i < ih; ++i)
+    {
+        const int di = dx[i];
+        if(di < 0)
+        {
+            const int q0 = i*w;
+            const int qw = q0 + w;
+            const int ql = q0 + (j+w+di)%w;
+            const int qh = q0 + (j-di+1)%w;
+            
+            if(ql < qh)
+            {
+                if(ql == qb)
+                    qv[2*r-1] = qb = qh;
+                else
+                {
+                    qv[2*r+0] = ql;
+                    qv[2*r+1] = qb = qh;
+                    r += 1;
+                }
+            }
+            else
+            {
+                if(q0 == qb)
+                    qv[2*r-1] = qb = qh;
+                else
+                {
+                    qv[2*r+0] = q0;
+                    qv[2*r+1] = qb = qh;
+                    r += 1;
+                }
+                
+                if(ql == qb)
+                    qv[2*r-1] = qb = qw;
+                else
+                {
+                    qv[2*r+0] = ql;
+                    qv[2*r+1] = qw;
+                    r += 1;
+                }
+            }
+        }
+        else
+        {
+            const int q0 = i*w;
+            const int ql = q0 > di ? q0-di : 0;
+            const int qh = q0+di < w ? q0+di+1 : w;
+            
+            if(ql == qb)
+                qv[2*r-1] = qb = qh;
+            else
+            {
+                qv[2*r+0] = ql;
+                qv[2*r+1] = qb = qh;
+                r += 1;
+            }
+        }
+    }
+    
+    *qc = r;
 }
 
 int main(int argc, char* argv[])
@@ -347,7 +356,8 @@ int main(int argc, char* argv[])
         double thmax;
         int thunit;
         int spacing;
-        int leafpts;
+        double gridx;
+        double gridy;
     } cfg;
     
     bool pt, xc, ls, rd;
@@ -357,12 +367,17 @@ int main(int argc, char* argv[])
     int S1, S2;
     
     size_t n1, n2;
-    double* c1;
-    double* c2;
+    data* c1;
+    data* c2;
     
-    size_t nn;
-    node* t1;
-    node* t2;
+    double xl, xh, yl, yh;
+    size_t gw, gh, ng;
+    double gx, gy;
+    int dy;
+    int* dx;
+    
+    int* m1;
+    int* m2;
     
     double* W;
     double* X;
@@ -370,10 +385,10 @@ int main(int argc, char* argv[])
     int p, np;
     time_t st;
     int dt;
-    size_t ni, nj, ii;
-    double* ci;
-    double* cj;
-    node* tj;
+    size_t ni, nj, ii, nn;
+    data* ci;
+    data* cj;
+    int* mj;
     int Si, Sj;
     
     size_t i, j;
@@ -504,8 +519,10 @@ int main(int argc, char* argv[])
             else
                 goto err_cfg_bad_value;
         }
-        else if(strcmp(key, "leafpts") == 0)
-            cfg.leafpts = atoi(val);
+        else if(strcmp(key, "gridx") == 0)
+            cfg.gridx = atof(val);
+        else if(strcmp(key, "gridy") == 0)
+            cfg.gridy = atof(val);
         else
             goto err_cfg_bad_key;
     }
@@ -525,8 +542,10 @@ int main(int argc, char* argv[])
     if(!cfg.thmax)
         { key = "thmax"; goto err_cfg_missing_key; }
     
-    if(!cfg.leafpts)
-        cfg.leafpts = 8;
+    if(cfg.gridx <= 0)
+        cfg.gridx = 0.1;
+    if(cfg.gridy <= 0)
+        cfg.gridy = 0.1;
     
     if(cfg.spin1)
         cfg.field1 = FIELD_COMPLEX;
@@ -623,8 +642,11 @@ int main(int argc, char* argv[])
                                     cfg.thmin, cfg.thmax, UNAME[cfg.thunit]);
     printf("bin spacing ..... %s\n", ls ? "logarithmic" : "linear");
     printf("\n");
-    printf("leaf points ..... %d\n", cfg.leafpts);
-    printf("\n");
+    if(rd)
+    {
+        printf("grid size ....... %g x %g deg^2\n", cfg.gridx, cfg.gridy);
+        printf("\n");
+    }
     
     printf("reading %s\n", pt ? "data catalog" : xc ? "catalog 1" : "catalog");
     
@@ -636,13 +658,6 @@ int main(int argc, char* argv[])
     }
     
     printf("> done with %zu points\n", n1);
-    printf("\n");
-    
-    printf("building %s\n", pt ? "data tree" : xc ? "tree 1" : "tree");
-    
-    t1 = tree(c1, 0, n1, 0, cfg.leafpts, &nn);
-    
-    printf("> done with %zu nodes\n", nn);
     printf("\n");
     
     if(xc)
@@ -658,19 +673,128 @@ int main(int argc, char* argv[])
         
         printf("> done with %zu points\n", n2);
         printf("\n");
-        
-        printf("building %s\n", pt ? "random tree" : "tree 2");
-        
-        t2 = tree(c2, 0, n2, 0, cfg.leafpts, &nn);
-        
-        printf("> done with %zu nodes\n", nn);
-        printf("\n");
     }
     else
     {
         c2 = NULL;
-        t2 = NULL;
+        n2 = 0;
     }
+    
+    printf("building index\n");
+    
+    if(rd)
+    {
+        xl = 0, xh = TWO_PI;
+        yl = -PI_HALF, yh = PI_HALF;
+    }
+    else
+    {
+        xl = xh = c1[0].x;
+        yl = yh = c1[0].y;
+        for(i = 1; i < n1; ++i)
+        {
+            if(c1[i].x < xl) xl = c1[i].x;
+            if(c1[i].x > xh) xh = c1[i].x;
+            if(c1[i].y < yl) yl = c1[i].y;
+            if(c1[i].y > yh) yh = c1[i].y;
+        }
+        for(i = 0; i < n2; ++i)
+        {
+            if(c2[i].x < xl) xl = c2[i].x;
+            if(c2[i].x > xh) xh = c2[i].x;
+            if(c2[i].y < yl) yl = c2[i].y;
+            if(c2[i].y > yh) yh = c2[i].y;
+        }
+    }
+    
+    if(rd)
+    {
+        gx = cfg.gridx*UCONV[UNIT_DEG];
+        gy = cfg.gridy*UCONV[UNIT_DEG];
+    }
+    else
+    {
+        gx = dh;
+        gy = dh;
+    }
+    
+    gw = (int)(fmax(1, floor((xh - xl)/gx)) + 0.5) | 1;
+    gh = fmax(1, floor((yh - yl)/gy)) + 0.5;
+    ng = gw*gh;
+    
+    gx = (xh - xl)/gw;
+    gy = (yh - yl)/gh;
+    
+    dy = ceil(dh/gy) + 0.5;
+    dx = malloc(gh*sizeof(int));
+    if(!dx)
+    {
+        perror(NULL);
+        abort();
+    }
+    
+    if(rd)
+    {
+        for(i = 0; i < gh; ++i)
+        {
+            const double cy = fmin(cos(yl + i*gy), cos(yl + (i+1)*gy));
+            const int di = sdh > cy ? gw/2 : ceil(asin(sdh/cy)/gx) + 0.5;
+            dx[i] = -di;
+        }
+    }
+    else
+    {
+        for(i = 0; i < gh; ++i)
+            dx[i] = ceil(dh/gx) + 0.5;
+    }
+    
+    m1 = malloc((ng+1)*sizeof(int));
+    if(!m1)
+    {
+        perror(NULL);
+        abort();
+    }
+    
+    for(i = 0; i < n1; ++i)
+        c1[i].i = index(c1[i].x - xl, c1[i].y - yl, gx, gy, gw);
+    
+    qsort(c1, n1, sizeof(data), mapsort);
+    
+    for(i = 0, j = 0; i < ng; ++i)
+    {
+        while(j < n1 && c1[j].i < i)
+            j += 1;
+        m1[i] = j;
+    }
+    m1[ng] = n1;
+    
+    if(xc)
+    {
+        m2 = malloc((ng+1)*sizeof(int));
+        if(!m2)
+        {
+            perror(NULL);
+            abort();
+        }
+        
+        for(i = 0; i < n2; ++i)
+            c2[i].i = index(c2[i].x - xl, c2[i].y - yl, gx, gy, gw);
+        
+        qsort(c2, n2, sizeof(data), mapsort);
+        
+        for(i = 0, j = 0; i < ng; ++i)
+        {
+            while(j < n2 && c2[j].i < i)
+                j += 1;
+            m2[i] = j;
+        }
+        m2[ng] = n2;
+    }
+    else
+        m2 = NULL;
+    
+    printf("> done with %zu x %zu grid cells\n", gw, gh);
+    printf("\n");
     
     W = calloc(3*nd, sizeof(double));
     X = calloc(4*nd, sizeof(double));
@@ -697,7 +821,7 @@ int main(int argc, char* argv[])
                 ni = n1;
                 
                 cj = c1;
-                tj = t1;
+                mj = m1;
                 
                 break;
                 
@@ -710,7 +834,7 @@ int main(int argc, char* argv[])
                 ni = n1;
                 
                 cj = c2;
-                tj = t2;
+                mj = m2;
                 
                 break;
                 
@@ -723,7 +847,7 @@ int main(int argc, char* argv[])
                 ni = n2;
                 
                 cj = c2;
-                tj = t2;
+                mj = m2;
                 
                 break;
             }
@@ -737,7 +861,7 @@ int main(int argc, char* argv[])
             Si = S1;
             
             cj = xc ? c2 : c1;
-            tj = xc ? t2 : t1;
+            mj = xc ? m2 : m1;
             Sj = xc ? S2 : S1;
         }
         
@@ -749,15 +873,15 @@ int main(int argc, char* argv[])
         nn = 0;
         
         #pragma omp parallel default(none) shared(st, dt, ii, nn, W, X) \
-            private(i, j, nj) firstprivate(pt, xc, rd, ls, nd, dh, dL, dH, \
-                d0, dm, sdh, p, ni, ci, cj, tj, Si, Sj, stdout)
+            private(i, j, nj) firstprivate(pt, xc, rd, ls, nd, dL, dH, d0, \
+                dm, gw, gh, dx, dy, p, ni, ci, cj, mj, Si, Sj, stdout)
         {
-            size_t tn, ta;
-            node** tl;
+            size_t qi;
+            int q, nq;
+            int* qr;
             
             double xi, yi, ui, vi, wi, sxi, cxi, syi, cyi;
             double xj, yj, uj, vj, wj, sxj, cxj, syj, cyj, sdx, cdx;
-            double xl, xh, yl, yh, dx;
             
             double d1, d2, d3, d;
             int n;
@@ -770,9 +894,8 @@ int main(int argc, char* argv[])
             double* Wi;
             double* Xi;
             
-            ta = 1;
-            tl = malloc(ta*sizeof(node*));
-            if(!tl)
+            qr = malloc((2*dy+1)*4*sizeof(int));
+            if(!qr)
             {
                 perror(NULL);
                 abort();
@@ -792,6 +915,8 @@ int main(int argc, char* argv[])
                 alarm(1);
             }
             
+            qi = -1;
+            
             #pragma omp for schedule(static, 1) nowait
             for(i = 0; i < ni; ++i)
             {
@@ -810,85 +935,43 @@ int main(int argc, char* argv[])
                     alarm(1);
                 }
                 
-                xi  = ci[i*DW+0];
-                yi  = ci[i*DW+1];
-                ui  = ci[i*DW+2];
-                vi  = ci[i*DW+3];
-                wi  = ci[i*DW+4];
-                sxi = ci[i*DW+5];
-                cxi = ci[i*DW+6];
-                syi = ci[i*DW+7];
-                cyi = ci[i*DW+8];
+                xi  = ci[i].x;
+                yi  = ci[i].y;
+                ui  = ci[i].u;
+                vi  = ci[i].v;
+                wi  = ci[i].w;
+                sxi = ci[i].sx;
+                cxi = ci[i].cx;
+                syi = ci[i].sy;
+                cyi = ci[i].cy;
                 
-                tl[0] = tj;
-                
-                for(tn = 1; tn > 0; --tn)
+                if(ci[i].i != qi)
                 {
-                    if(!xc && tl[tn-1]->n <= i+1)
-                        continue;
-                    
-                    xl = tl[tn-1]->xl;
-                    xh = tl[tn-1]->xh;
-                    yl = tl[tn-1]->yl;
-                    yh = tl[tn-1]->yh;
-                    
-                    if(yi - dh >= yh || yi + dh <= yl)
-                        continue;
-                    
-                    if(rd)
-                    {
-                        if(cyi > sdh)
-                        {
-                            dx = asin(sdh/cyi);
-                            if((xi - dx >= xh && xi + dx - TWO_PI <= xl) ||
-                                    (xi + dx <= xl && xi - dx + TWO_PI >= xh))
-                                continue;
-                        }
-                    }
-                    else
-                    {
-                        if(xi - dh >= xh || xi + dh <= xl)
-                            continue;
-                    }
-                    
-                    if(tl[tn-1]->l)
-                    {
-                        if(tn == ta)
-                        {
-                            ta *= 2;
-                            tl = realloc(tl, ta*sizeof(node*));
-                            if(!tl)
-                            {
-                                perror(NULL);
-                                abort();
-                            }
-                        }
-                        
-                        tl[tn] = tl[tn-1]->l;
-                        tl[tn-1] = tl[tn-1]->r;
-                        
-                        tn += 2;
-                        
-                        continue;
-                    }
-                    
-                    j = tl[tn-1]->i;
-                    nj = tl[tn-1]->n;
+                    qi = ci[i].i;
+                    query(qi, gw, gh, dy, dx, &nq, qr);
+                    for(q = 0; q < 2*nq; ++q)
+                        qr[q] = mj[qr[q]];
+                }
+                
+                for(q = 0; q < nq; ++q)
+                {
+                    j = qr[2*q+0];
+                    nj = qr[2*q+1];
                     
                     if(!xc && j < i+1)
                         j = i+1;
                     
                     for(; j < nj; ++j)
                     {
-                        xj  = cj[j*DW+0];
-                        yj  = cj[j*DW+1];
-                        uj  = cj[j*DW+2];
-                        vj  = cj[j*DW+3];
-                        wj  = cj[j*DW+4];
-                        sxj = cj[j*DW+5];
-                        cxj = cj[j*DW+6];
-                        syj = cj[j*DW+7];
-                        cyj = cj[j*DW+8];
+                        xj  = cj[j].x;
+                        yj  = cj[j].y;
+                        uj  = cj[j].u;
+                        vj  = cj[j].v;
+                        wj  = cj[j].w;
+                        sxj = cj[j].sx;
+                        cxj = cj[j].cx;
+                        syj = cj[j].sy;
+                        cyj = cj[j].cy;
                         
                         sdx = cxi*sxj - sxi*cxj;
                         cdx = cxi*cxj + sxi*sxj;
@@ -979,7 +1062,7 @@ int main(int argc, char* argv[])
                 X[3*nd+i] += Xi[3*nd+i];
             }
             
-            free(tl);
+            free(qr);
             free(Wi);
             free(Xi);
         }
@@ -1047,10 +1130,11 @@ int main(int argc, char* argv[])
     
     free(W);
     free(X);
-    tree_free(t1);
-    tree_free(t2);
+    free(m1);
+    free(m2);
     free(c1);
     free(c2);
+    free(dx);
     
     return EXIT_SUCCESS;
     
