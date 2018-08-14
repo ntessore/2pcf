@@ -1008,10 +1008,10 @@ int main(int argc, char* argv[])
                             const double xim_re = (uu - vv)*cm - (uv + vu)*sm;
                             const double xim_im = (uv + vu)*cm + (uu - vv)*sm;
                             
-                            Xi[0*nd+n] += ww*xip_re;
-                            Xi[1*nd+n] += ww*xim_re;
-                            Xi[2*nd+n] += ww*xip_im;
-                            Xi[3*nd+n] += ww*xim_im;
+                            Xi[0*nd+n] += (ww/Wi[n])*(xip_re - Xi[0*nd+n]);
+                            Xi[1*nd+n] += (ww/Wi[n])*(xim_re - Xi[1*nd+n]);
+                            Xi[2*nd+n] += (ww/Wi[n])*(xip_im - Xi[2*nd+n]);
+                            Xi[3*nd+n] += (ww/Wi[n])*(xim_im - Xi[3*nd+n]);
                         }
                         
                         #pragma omp atomic
@@ -1029,10 +1029,10 @@ int main(int argc, char* argv[])
             for(i = 0; i < nd; ++i)
             {
                 W[p*nd+i] += Wi[i];
-                X[0*nd+i] += Xi[0*nd+i];
-                X[1*nd+i] += Xi[1*nd+i];
-                X[2*nd+i] += Xi[2*nd+i];
-                X[3*nd+i] += Xi[3*nd+i];
+                X[0*nd+i] += (Wi[i]/W[p*nd+i])*(Xi[0*nd+i] - X[0*nd+i]);
+                X[1*nd+i] += (Wi[i]/W[p*nd+i])*(Xi[1*nd+i] - X[1*nd+i]);
+                X[2*nd+i] += (Wi[i]/W[p*nd+i])*(Xi[2*nd+i] - X[2*nd+i]);
+                X[3*nd+i] += (Wi[i]/W[p*nd+i])*(Xi[3*nd+i] - X[3*nd+i]);
             }
             
             free(qr);
@@ -1090,13 +1090,12 @@ int main(int argc, char* argv[])
         }
         else
         {
-            double nor, xip_re, xim_re, xip_im, xim_im;
+            double xip_re, xim_re, xip_im, xim_im;
             
-            nor = W[i] ? W[i] : 1;
-            xip_re = X[0*nd+i]/nor;
-            xim_re = X[1*nd+i]/nor;
-            xip_im = X[2*nd+i]/nor;
-            xim_im = X[3*nd+i]/nor;
+            xip_re = X[0*nd+i];
+            xim_re = X[1*nd+i];
+            xip_im = X[2*nd+i];
+            xim_im = X[3*nd+i];
             
             fprintf(fp, "% .18e % .18e % .18e % .18e % .18e\n",
                                         d, xip_re, xim_re, xip_im, xim_im);
