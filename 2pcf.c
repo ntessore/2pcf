@@ -867,7 +867,7 @@ int main(int argc, char* argv[])
         nn = 0;
         
         #pragma omp parallel default(none) shared(st, dt, ii, nn, W, X, qQ) \
-            private(i, j, nj) firstprivate(pt, xc, rd, ls, nd, db, gw, gh, \
+            private(i, j, nj) firstprivate(pt, xc, rd, nd, db, gw, gh, \
                 dx, dy, p, ni, ci, cj, mj, Si, Sj, stdout)
         {
             size_t qi;
@@ -963,7 +963,7 @@ int main(int argc, char* argv[])
                         const double d2 = sdx*cyi;
                         const double d3 = syj - syi;
                         
-                        double d = d1*d1 + d2*d2 + d3*d3;
+                        const double d = d1*d1 + d2*d2 + d3*d3;
                         
                         if(d < db[0] || d >= db[nd])
                             continue;
