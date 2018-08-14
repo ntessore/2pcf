@@ -965,14 +965,18 @@ int main(int argc, char* argv[])
                         const double d2 = sdx*cyi;
                         const double d3 = syj - syi;
                         
-                        const double dc = d1*d1 + d2*d2 + d3*d3;
+                        double d = d1*d1 + d2*d2 + d3*d3;
                         
-                        if(dc < dL || dc >= dH)
+                        if(d < dL || d >= dH)
                             continue;
                         
-                        const double d = rd ? 2*asin(0.5*sqrt(dc)) : sqrt(dc);
+                        d = sqrt(d);
+                        if(rd)
+                            d = 2*asin(0.5*d);
+                        if(ls)
+                            d = log(d);
                         
-                        const int n = ls ? dm*(log(d) - d0) : dm*(d - d0);
+                        const int n = dm*(d - d0);
                         
                         const double ww = wi*wj;
                         
