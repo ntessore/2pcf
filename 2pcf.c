@@ -274,49 +274,33 @@ void query(int k, int w, int h, int dy, const int dx[], int* qc, int qv[])
             if(ql < qh)
             {
                 if(ql == qb)
-                    qv[2*r-1] = qb = qh;
+                    qb = (qv[2*r-1] = qh);
                 else
-                {
-                    qv[2*r+0] = ql;
-                    qv[2*r+1] = qb = qh;
-                    r += 1;
-                }
+                    qb = (qv[2*r+0] = ql, qv[2*r+1] = qh), ++r;
             }
             else
             {
                 if(q0 == qb)
-                    qv[2*r-1] = qb = qh;
+                    qb = (qv[2*r-1] = qh);
                 else
-                {
-                    qv[2*r+0] = q0;
-                    qv[2*r+1] = qb = qh;
-                    r += 1;
-                }
+                    qb = (qv[2*r+0] = q0, qv[2*r+1] = qh), ++r;
                 
                 if(ql == qb)
-                    qv[2*r-1] = qb = qw;
+                    qb = (qv[2*r-1] = qw);
                 else
-                {
-                    qv[2*r+0] = ql;
-                    qv[2*r+1] = qw;
-                    r += 1;
-                }
+                    qb = (qv[2*r+0] = ql, qv[2*r+1] = qw), ++r;
             }
         }
         else
         {
             const int q0 = i*w;
-            const int ql = q0 > di ? q0-di : 0;
-            const int qh = q0+di < w ? q0+di+1 : w;
+            const int ql = q0 + (j > di ? j-di : 0);
+            const int qh = q0 + (j+di < w ? j+di+1 : w);
             
             if(ql == qb)
-                qv[2*r-1] = qb = qh;
+                qb = (qv[2*r-1] = qh);
             else
-            {
-                qv[2*r+0] = ql;
-                qv[2*r+1] = qb = qh;
-                r += 1;
-            }
+                qb = (qv[2*r+0] = ql, qv[2*r+1] = qh), ++r;
         }
     }
     
@@ -677,8 +661,19 @@ int main(int argc, char* argv[])
     
     if(rd)
     {
-        xl = 0, xh = TWO_PI;
-        yl = -PI_HALF, yh = PI_HALF;
+        xl = 0;
+        xh = TWO_PI;
+        yl = -PI_HALF;
+        yh = +PI_HALF;
+        
+        gx = cfg.gridx*UCONV[UNIT_DEG];
+        gy = cfg.gridy*UCONV[UNIT_DEG];
+        
+        gw = (int)(fmax(1, floor((xh - xl)/gx))) | 1;
+        gh = fmax(1, floor((yh - yl)/gy));
+        
+        gx = (xh - xl)/gw;
+        gy = (yh - yl)/gh;
     }
     else
     {
@@ -698,27 +693,17 @@ int main(int argc, char* argv[])
             if(c2[i*DW+1] < yl) yl = c2[i*DW+1];
             if(c2[i*DW+1] > yh) yh = c2[i*DW+1];
         }
-    }
-    
-    if(rd)
-    {
-        gx = cfg.gridx*UCONV[UNIT_DEG];
-        gy = cfg.gridy*UCONV[UNIT_DEG];
-    }
-    else
-    {
+        
+        gw = floor((xh - xl)/dh) + 1;
+        gh = floor((yh - yl)/dh) + 1;
+        
         gx = dh;
         gy = dh;
     }
     
-    gw = (int)(fmax(1, floor((xh - xl)/gx)) + 0.5) | 1;
-    gh = fmax(1, floor((yh - yl)/gy)) + 0.5;
     ng = gw*gh;
     
-    gx = (xh - xl)/gw;
-    gy = (yh - yl)/gh;
-    
-    dy = ceil(dh/gy) + 0.5;
+    dy = ceil(dh/gy);
     dx = malloc(gh*sizeof(int));
     if(!dx)
     {
@@ -731,14 +716,14 @@ int main(int argc, char* argv[])
         for(i = 0; i < gh; ++i)
         {
             const double cy = fmin(cos(yl + i*gy), cos(yl + (i+1)*gy));
-            const int di = sdh > cy ? gw/2 : ceil(asin(sdh/cy)/gx) + 0.5;
+            const int di = sdh > cy ? gw/2 : ceil(asin(sdh/cy)/gx);
             dx[i] = -di;
         }
     }
     else
     {
         for(i = 0; i < gh; ++i)
-            dx[i] = ceil(dh/gx) + 0.5;
+            dx[i] = ceil(dh/gx);
     }
     
     m1 = malloc((ng+1)*sizeof(int));
