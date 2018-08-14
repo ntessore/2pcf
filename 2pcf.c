@@ -53,15 +53,6 @@ const char* UNAME[NUM_UNITS] = {
 static const double PI_HALF = 1.5707963267948966192;
 static const double TWO_PI = 6.2831853071795864769;
 
-typedef struct {
-    size_t i;
-    double x, y;
-    double u, v;
-    double w;
-    double sx, cx;
-    double sy, cy;
-} data;
-
 static void nsincos(int n, double x, double y, double* s, double* c)
 {
     double h;
@@ -103,13 +94,15 @@ static void nsincos(int n, double x, double y, double* s, double* c)
     }
 }
 
-data* readc(const char* f, double ui, bool rd, bool pt, bool cf, size_t* n)
+static const int DW = 8;
+
+double* readc(const char* f, double ui, bool pt, bool cf, size_t* n)
 {
     FILE* fp;
     int l;
     char buf[LINELEN];
     size_t i, a;
-    data* d;
+    double* d;
     char* sx;
     char* sy;
     char* su;
@@ -127,7 +120,7 @@ data* readc(const char* f, double ui, bool rd, bool pt, bool cf, size_t* n)
     i = 0;
     a = 1;
     
-    d = malloc(a*sizeof(data));
+    d = malloc(a*DW*sizeof(double));
     if(!d)
     {
         perror(NULL);
@@ -188,22 +181,20 @@ data* readc(const char* f, double ui, bool rd, bool pt, bool cf, size_t* n)
         else
             w = atof(sw);
         
-        d[i].x  = x;
-        d[i].y  = y;
-        d[i].u  = u;
-        d[i].v  = v;
-        d[i].w  = w;
-        d[i].sx = rd ? sin(x) : 0;
-        d[i].cx = rd ? cos(x) : 0;
-        d[i].sy = rd ? sin(y) : 0;
-        d[i].cy = rd ? cos(y) : 0;
+        d[i*DW+0] = x;
+        d[i*DW+1] = y;
+        d[i*DW+2] = 1;
+        d[i*DW+3] = 1;
+        d[i*DW+4] = u;
+        d[i*DW+5] = v;
+        d[i*DW+6] = w;
         
         i += 1;
         
         if(i == a)
         {
             a *= 2;
-            d = realloc(d, a*sizeof(data));
+            d = realloc(d, a*DW*sizeof(double));
             if(!d)
             {
                 perror(NULL);
@@ -214,7 +205,7 @@ data* readc(const char* f, double ui, bool rd, bool pt, bool cf, size_t* n)
     
     fclose(fp);
     
-    d = realloc(d, i*sizeof(data));
+    d = realloc(d, i*DW*sizeof(double));
     if(!d)
     {
         perror(NULL);
@@ -239,17 +230,17 @@ void handler(int s)
 
 int mapsort(const void* a, const void* b)
 {
-    const data* x = a;
-    const data* y = b;
+    const double* x = a;
+    const double* y = b;
     
-    if(x->i < y->i)
+    if(x[7] < y[7])
         return -1;
-    if(x->i > y->i)
+    if(x[7] > y[7])
         return +1;
     
-    if(x->x < y->x)
+    if(x[0] < y[0])
         return -1;
-    if(x->x > y->x)
+    if(x[0] > y[0])
         return +1;
     
     return 0;
@@ -369,8 +360,8 @@ int main(int argc, char* argv[])
     int S1, S2;
     
     size_t n1, n2;
-    data* c1;
-    data* c2;
+    double* c1;
+    double* c2;
     
     double xl, xh, yl, yh;
     size_t gw, gh, ng;
@@ -388,8 +379,8 @@ int main(int argc, char* argv[])
     time_t st;
     int dt;
     size_t ni, nj, ii, nn;
-    data* ci;
-    data* cj;
+    double* ci;
+    double* cj;
     int* mj;
     int Si, Sj;
     
@@ -652,7 +643,7 @@ int main(int argc, char* argv[])
     
     printf("reading %s\n", pt ? "data catalog" : xc ? "catalog 1" : "catalog");
     
-    c1 = readc(cfg.catalog1, ui, rd, pt, cfg.field1, &n1);
+    c1 = readc(cfg.catalog1, ui, pt, cfg.field1, &n1);
     if(!c1)
     {
         fprintf(stderr, "error: could not read %s\n", cfg.catalog1);
@@ -666,7 +657,7 @@ int main(int argc, char* argv[])
     {
         printf("reading %s\n", pt ? "random catalog" : "catalog 2");
         
-        c2 = readc(cfg.catalog2, ui, rd, pt, cfg.field2, &n2);
+        c2 = readc(cfg.catalog2, ui, pt, cfg.field2, &n2);
         if(!c2)
         {
             fprintf(stderr, "error: could not read %s\n", cfg.catalog2);
@@ -691,21 +682,21 @@ int main(int argc, char* argv[])
     }
     else
     {
-        xl = xh = c1[0].x;
-        yl = yh = c1[0].y;
+        xl = xh = c1[0];
+        yl = yh = c1[1];
         for(i = 1; i < n1; ++i)
         {
-            if(c1[i].x < xl) xl = c1[i].x;
-            if(c1[i].x > xh) xh = c1[i].x;
-            if(c1[i].y < yl) yl = c1[i].y;
-            if(c1[i].y > yh) yh = c1[i].y;
+            if(c1[i*DW+0] < xl) xl = c1[i*DW+0];
+            if(c1[i*DW+0] > xh) xh = c1[i*DW+0];
+            if(c1[i*DW+1] < yl) yl = c1[i*DW+1];
+            if(c1[i*DW+1] > yh) yh = c1[i*DW+1];
         }
         for(i = 0; i < n2; ++i)
         {
-            if(c2[i].x < xl) xl = c2[i].x;
-            if(c2[i].x > xh) xh = c2[i].x;
-            if(c2[i].y < yl) yl = c2[i].y;
-            if(c2[i].y > yh) yh = c2[i].y;
+            if(c2[i*DW+0] < xl) xl = c2[i*DW+0];
+            if(c2[i*DW+0] > xh) xh = c2[i*DW+0];
+            if(c2[i*DW+1] < yl) yl = c2[i*DW+1];
+            if(c2[i*DW+1] > yh) yh = c2[i*DW+1];
         }
     }
     
@@ -758,13 +749,13 @@ int main(int argc, char* argv[])
     }
     
     for(i = 0; i < n1; ++i)
-        c1[i].i = index(c1[i].x - xl, c1[i].y - yl, gx, gy, gw);
+        c1[i*DW+7] = index(c1[i*DW+0] - xl, c1[i*DW+1] - yl, gx, gy, gw);
     
-    qsort(c1, n1, sizeof(data), mapsort);
+    qsort(c1, n1, DW*sizeof(double), mapsort);
     
     for(i = 0, j = 0; i < ng; ++i)
     {
-        while(j < n1 && c1[j].i < i)
+        while(j < n1 && c1[j*DW+7] < i)
             j += 1;
         m1[i] = j;
     }
@@ -780,13 +771,13 @@ int main(int argc, char* argv[])
         }
         
         for(i = 0; i < n2; ++i)
-            c2[i].i = index(c2[i].x - xl, c2[i].y - yl, gx, gy, gw);
+            c2[i*DW+7] = index(c2[i*DW+0] - xl, c2[i*DW+1] - yl, gx, gy, gw);
         
-        qsort(c2, n2, sizeof(data), mapsort);
+        qsort(c2, n2, DW*sizeof(double), mapsort);
         
         for(i = 0, j = 0; i < ng; ++i)
         {
-            while(j < n2 && c2[j].i < i)
+            while(j < n2 && c2[j*DW+7] < i)
                 j += 1;
             m2[i] = j;
         }
@@ -797,6 +788,20 @@ int main(int argc, char* argv[])
     
     printf("> done with %zu x %zu grid cells\n", gw, gh);
     printf("\n");
+    
+    if(rd)
+    {
+        for(i = 0; i < n1; ++i)
+        {
+            __sincos(c1[i*DW+0], &c1[i*DW+0], &c1[i*DW+2]);
+            __sincos(c1[i*DW+1], &c1[i*DW+1], &c1[i*DW+3]);
+        }
+        for(i = 0; i < n2; ++i)
+        {
+            __sincos(c2[i*DW+0], &c2[i*DW+0], &c2[i*DW+2]);
+            __sincos(c2[i*DW+1], &c2[i*DW+1], &c2[i*DW+3]);
+        }
+    }
     
     W = calloc(3*nd, sizeof(double));
     X = calloc(4*nd, sizeof(double));
@@ -885,17 +890,6 @@ int main(int argc, char* argv[])
             int q, nq;
             int* qr;
             
-            double xi, yi, ui, vi, wi, sxi, cxi, syi, cyi;
-            double xj, yj, uj, vj, wj, sxj, cxj, syj, cyj, sdx, cdx;
-            
-            double d1, d2, d3, d;
-            int n;
-            
-            double ww, uu, uv, vu, vv;
-            double sij, cij, sji, cji;
-            double sp, cp, sm, cm;
-            double xip_re, xip_im, xim_re, xim_im;
-            
             double* Wi;
             double* Xi;
             
@@ -943,19 +937,17 @@ int main(int argc, char* argv[])
                     alarm(1);
                 }
                 
-                xi  = ci[i].x;
-                yi  = ci[i].y;
-                ui  = ci[i].u;
-                vi  = ci[i].v;
-                wi  = ci[i].w;
-                sxi = ci[i].sx;
-                cxi = ci[i].cx;
-                syi = ci[i].sy;
-                cyi = ci[i].cy;
+                const double sxi = ci[i*DW+0];
+                const double syi = ci[i*DW+1];
+                const double cxi = ci[i*DW+2];
+                const double cyi = ci[i*DW+3];
+                const double ui  = ci[i*DW+4];
+                const double vi  = ci[i*DW+5];
+                const double wi  = ci[i*DW+6];
                 
-                if(ci[i].i != qi)
+                if(ci[i*DW+7] != qi)
                 {
-                    qi = ci[i].i;
+                    qi = ci[i*DW+7];
                     query(qi, gw, gh, dy, dx, &nq, qr);
                     for(q = 0; q < 2*nq; ++q)
                         qr[q] = mj[qr[q]];
@@ -971,82 +963,59 @@ int main(int argc, char* argv[])
                     
                     for(; j < nj; ++j)
                     {
-                        xj  = cj[j].x;
-                        yj  = cj[j].y;
-                        uj  = cj[j].u;
-                        vj  = cj[j].v;
-                        wj  = cj[j].w;
-                        sxj = cj[j].sx;
-                        cxj = cj[j].cx;
-                        syj = cj[j].sy;
-                        cyj = cj[j].cy;
+                        const double sxj = cj[j*DW+0];
+                        const double syj = cj[j*DW+1];
+                        const double cxj = cj[j*DW+2];
+                        const double cyj = cj[j*DW+3];
+                        const double uj  = cj[j*DW+4];
+                        const double vj  = cj[j*DW+5];
+                        const double wj  = cj[j*DW+6];
                         
-                        sdx = cxi*sxj - sxi*cxj;
-                        cdx = cxi*cxj + sxi*sxj;
+                        const double sdx = cxi*sxj - sxi*cxj;
+                        const double cdx = cxi*cxj + rd*sxi*sxj;
                         
-                        if(rd)
-                        {
-                            d1 = syj - syi;
-                            d2 = cdx*cyi - cyj;
-                            d3 = sdx*cyi;
-                            d = d1*d1 + d2*d2 + d3*d3;
-                        }
-                        else
-                        {
-                            d1 = xj - xi;
-                            d2 = yj - yi;
-                            d = d1*d1 + d2*d2;
-                        }
+                        const double d1 = cdx*cyi - cyj;
+                        const double d2 = sdx*cyi;
+                        const double d3 = syj - syi;
                         
-                        if(d < dL || d >= dH)
+                        const double dc = d1*d1 + d2*d2 + d3*d3;
+                        
+                        if(dc < dL || dc >= dH)
                             continue;
                         
-                        d = sqrt(d);
-                        if(rd)
-                            d = 2*asin(0.5*d);
-                        if(ls)
-                            d = log(d);
+                        const double d = rd ? 2*asin(0.5*sqrt(dc)) : sqrt(dc);
                         
-                        n = dm*(d - d0);
+                        const int n = ls ? dm*(log(d) - d0) : dm*(d - d0);
                         
-                        ww = wi*wj;
+                        const double ww = wi*wj;
                         
                         Wi[n] += ww;
                         
                         if(!pt)
                         {
-                            uu = ui*uj;
-                            uv = ui*vj;
-                            vu = vi*uj;
-                            vv = vi*vj;
+                            const double uu = ui*uj;
+                            const double uv = ui*vj;
+                            const double vu = vi*uj;
+                            const double vv = vi*vj;
                             
-                            if(rd)
-                            {
-                                cij = cyi*syj - syi*cyj*cdx;
-                                sij = cyj*sdx;
-                                cji = cyj*syi - syj*cyi*cdx;
-                                sji = -cyi*sdx;
-                            }
-                            else
-                            {
-                                cij = yj - yi;
-                                sij = xj - xi;
-                                cji = yi - yj;
-                                sji = xi - xj;
-                            }
+                            const double xij = cyi*syj - syi*cyj*cdx;
+                            const double yij = cyj*sdx;
+                            const double xji = cyj*syi - syj*cyi*cdx;
+                            const double yji = -cyi*sdx;
                             
-                            nsincos(Si, cij, sij, &sij, &cij);
-                            nsincos(Sj, cji, sji, &sji, &cji);
+                            double sij, cij, sji, cji;
+                            nsincos(Si, xij, yij, &sij, &cij);
+                            nsincos(Sj, xji, yji, &sji, &cji);
                             
-                            cp = cij*cji + sij*sji;
-                            sp = sij*cji - cij*sji;
-                            cm = cij*cji - sij*sji;
-                            sm = sij*cji + cij*sji;
+                            const double cp = cij*cji + sij*sji;
+                            const double sp = sij*cji - cij*sji;
+                            const double cm = cij*cji - sij*sji;
+                            const double sm = sij*cji + cij*sji;
                             
-                            xip_re = (uu + vv)*cp - (uv - vu)*sp;
-                            xip_im = (uv - vu)*cp + (uu + vv)*sp;
-                            xim_re = (uu - vv)*cm - (uv + vu)*sm;
-                            xim_im = (uv + vu)*cm + (uu - vv)*sm;
+                            const double xip_re = (uu + vv)*cp - (uv - vu)*sp;
+                            const double xip_im = (uv - vu)*cp + (uu + vv)*sp;
+                            const double xim_re = (uu - vv)*cm - (uv + vu)*sm;
+                            const double xim_im = (uv + vu)*cm + (uu - vv)*sm;
                             
                             Xi[0*nd+n] += ww*xip_re;
                             Xi[1*nd+n] += ww*xim_re;
