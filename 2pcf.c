@@ -364,7 +364,7 @@ int main(int argc, char* argv[])
     int p, np;
     time_t st;
     int dt;
-    size_t ni, nj, ii, nn;
+    size_t ni, nj, nn;
     double* ci;
     double* cj;
     int* mj;
@@ -810,12 +810,8 @@ int main(int argc, char* argv[])
                 printf("calculating DD correlations\n");
                 
                 xc = false;
-                
-                ci = c1;
-                ni = n1;
-                
-                cj = c1;
-                mj = m1;
+                ci = c1, ni = n1;
+                cj = c1, nj = n1, mj = m1;
                 
                 break;
                 
@@ -823,12 +819,8 @@ int main(int argc, char* argv[])
                 printf("calculating DR correlations\n");
                 
                 xc = true;
-                
-                ci = c1;
-                ni = n1;
-                
-                cj = c2;
-                mj = m2;
+                ci = c1, ni = n1;
+                cj = c2, nj = n2, mj = m2;
                 
                 break;
                 
@@ -836,12 +828,8 @@ int main(int argc, char* argv[])
                 printf("calculating RR correlations\n");
                 
                 xc = false;
-                
-                ci = c2;
-                ni = n2;
-                
-                cj = c2;
-                mj = m2;
+                ci = c2, ni = n2;
+                cj = c2, nj = n2, mj = m2;
                 
                 break;
             }
@@ -855,6 +843,7 @@ int main(int argc, char* argv[])
             Si = S1;
             
             cj = xc ? c2 : c1;
+            nj = xc ? n2 : n1;
             mj = xc ? m2 : m1;
             Sj = xc ? S2 : S1;
         }
@@ -863,19 +852,24 @@ int main(int argc, char* argv[])
         dt = 0;
         fb = 0;
         
-        ii = 0;
         nn = 0;
         
-        #pragma omp parallel default(none) shared(st, dt, ii, nn, W, X, qQ) \
-            private(i, j, nj) firstprivate(pt, xc, rd, nd, db, gw, gh, \
-                dx, dy, p, ni, ci, cj, mj, Si, Sj, stdout)
+        #pragma omp parallel default(none) shared(st, dt, nn, W, X, qQ) \
+            private(i, j) firstprivate(pt, xc, rd, nd, db, ng, gw, gh, dx, \
+                dy, p, ni, nj, ci, cj, mj, Si, Sj, stdout)
         {
             size_t qi;
             int q, nq;
             int* qr;
             
-            double* Wi;
-            double* Xi;
+            double* db_;
+            double* ci_;
+            double* cj_;
+            int* mj_;
+            
+            size_t nn_;
+            double* W_;
+            double* X_;
             
             nq = 0;
             qr = malloc((2*dy+1)*4*sizeof(int));
@@ -885,9 +879,34 @@ int main(int argc, char* argv[])
                 abort();
             }
             
-            Wi = calloc(nd, sizeof(double));
-            Xi = calloc(4*nd, sizeof(double));
-            if(!Wi || !Xi)
+#ifdef _OPENMP
+            db_ = malloc((nd+1)*sizeof(double));
+            ci_ = malloc(ni*DW*sizeof(double));
+            if(cj != ci)
+                cj_ = malloc(nj*DW*sizeof(double));
+            else
+                cj_ = ci_;
+            mj_ = malloc((ng+1)*sizeof(int));
+            if(!db_ || !ci_ || !cj_ || !mj_)
+            {
+                perror(NULL);
+                abort();
+            }
+            memcpy(db_, db, (nd+1)*sizeof(double));
+            memcpy(ci_, ci, ni*DW*sizeof(double));
+            if(cj != ci)
+                memcpy(cj_, cj, nj*DW*sizeof(double));
+            memcpy(mj_, mj, (ng+1)*sizeof(int));
+#else
+            db_ = db;
+            ci_ = ci;
+            cj_ = cj;
+            mj_ = mj;
+#endif
+            
+            W_ = calloc(nd, sizeof(double));
+            X_ = calloc(4*nd, sizeof(double));
+            if(!W_ || !X_)
             {
                 perror(NULL);
                 abort();
@@ -900,6 +919,7 @@ int main(int argc, char* argv[])
             }
             
             qi = -1;
+            nn_ = 0;
             
             #pragma omp for schedule(static, 1) nowait
             for(i = 0; i < ni; ++i)
@@ -907,14 +927,11 @@ int main(int argc, char* argv[])
                 if(qQ)
                     continue;
                 
-                #pragma omp atomic
-                ii += 1;
-                
                 if(fb)
                 {
                     dt = difftime(time(NULL), st);
                     
-                    printf("\r> %.2f%%", 100.*ii/ni);
+                    printf("\r> %.2f%%", 100.*i/ni);
                     printf(" - %02d:%02d:%02d ", dt/3600, (dt/60)%60, dt%60);
                     fflush(stdout);
                     
@@ -922,20 +939,20 @@ int main(int argc, char* argv[])
                     alarm(1);
                 }
                 
-                const double sxi = ci[i*DW+0];
-                const double syi = ci[i*DW+1];
-                const double cxi = ci[i*DW+2];
-                const double cyi = ci[i*DW+3];
-                const double ui  = ci[i*DW+4];
-                const double vi  = ci[i*DW+5];
-                const double wi  = ci[i*DW+6];
+                const double sxi = ci_[i*DW+0];
+                const double syi = ci_[i*DW+1];
+                const double cxi = ci_[i*DW+2];
+                const double cyi = ci_[i*DW+3];
+                const double ui  = ci_[i*DW+4];
+                const double vi  = ci_[i*DW+5];
+                const double wi  = ci_[i*DW+6];
                 
-                if(ci[i*DW+7] != qi)
+                if(ci_[i*DW+7] != qi)
                 {
-                    qi = ci[i*DW+7];
+                    qi = ci_[i*DW+7];
                     query(qi, gw, gh, dy, dx, &nq, qr);
                     for(q = 0; q < 2*nq; ++q)
-                        qr[q] = mj[qr[q]];
+                        qr[q] = mj_[qr[q]];
                 }
                 
                 for(q = 0; q < nq; ++q)
@@ -948,13 +965,13 @@ int main(int argc, char* argv[])
                     
                     for(; j < nj; ++j)
                     {
-                        const double sxj = cj[j*DW+0];
-                        const double syj = cj[j*DW+1];
-                        const double cxj = cj[j*DW+2];
-                        const double cyj = cj[j*DW+3];
-                        const double uj  = cj[j*DW+4];
-                        const double vj  = cj[j*DW+5];
-                        const double wj  = cj[j*DW+6];
+                        const double sxj = cj_[j*DW+0];
+                        const double syj = cj_[j*DW+1];
+                        const double cxj = cj_[j*DW+2];
+                        const double cyj = cj_[j*DW+3];
+                        const double uj  = cj_[j*DW+4];
+                        const double vj  = cj_[j*DW+5];
+                        const double wj  = cj_[j*DW+6];
                         
                         const double sdx = cxi*sxj - sxi*cxj;
                         const double cdx = cxi*cxj + rd*sxi*sxj;
@@ -965,7 +982,7 @@ int main(int argc, char* argv[])
                         
                         const double d = d1*d1 + d2*d2 + d3*d3;
                         
-                        if(d < db[0] || d >= db[nd])
+                        if(d < db_[0] || d >= db_[nd])
                             continue;
                         
                         size_t n = 0;
@@ -974,7 +991,7 @@ int main(int argc, char* argv[])
                         
                         const double ww = wi*wj;
                         
-                        Wi[n] += ww;
+                        W_[n] += ww;
                         
                         if(!pt)
                         {
@@ -1002,14 +1019,13 @@ int main(int argc, char* argv[])
                             const double xim_re = (uu - vv)*cm - (uv + vu)*sm;
                             const double xim_im = (uv + vu)*cm + (uu - vv)*sm;
                             
-                            Xi[0*nd+n] += (ww/Wi[n])*(xip_re - Xi[0*nd+n]);
-                            Xi[1*nd+n] += (ww/Wi[n])*(xim_re - Xi[1*nd+n]);
-                            Xi[2*nd+n] += (ww/Wi[n])*(xip_im - Xi[2*nd+n]);
-                            Xi[3*nd+n] += (ww/Wi[n])*(xim_im - Xi[3*nd+n]);
+                            X_[0*nd+n] += (ww/W_[n])*(xip_re - X_[0*nd+n]);
+                            X_[1*nd+n] += (ww/W_[n])*(xim_re - X_[1*nd+n]);
+                            X_[2*nd+n] += (ww/W_[n])*(xip_im - X_[2*nd+n]);
+                            X_[3*nd+n] += (ww/W_[n])*(xim_im - X_[3*nd+n]);
                         }
                         
-                        #pragma omp atomic
-                        nn += 1;
+                        nn_ += 1;
                     }
                 }
             }
@@ -1020,18 +1036,30 @@ int main(int argc, char* argv[])
             }
             
             #pragma omp critical
-            for(i = 0; i < nd; ++i)
             {
-                W[p*nd+i] += Wi[i];
-                X[0*nd+i] += (Wi[i]/W[p*nd+i])*(Xi[0*nd+i] - X[0*nd+i]);
-                X[1*nd+i] += (Wi[i]/W[p*nd+i])*(Xi[1*nd+i] - X[1*nd+i]);
-                X[2*nd+i] += (Wi[i]/W[p*nd+i])*(Xi[2*nd+i] - X[2*nd+i]);
-                X[3*nd+i] += (Wi[i]/W[p*nd+i])*(Xi[3*nd+i] - X[3*nd+i]);
+                for(i = 0; i < nd; ++i)
+                {
+                    const double wi = W_[i];
+                    const double wt = wi ? (W[p*nd+i] += wi) : 1;
+                    X[0*nd+i] += (wi/wt)*(X_[0*nd+i] - X[0*nd+i]);
+                    X[1*nd+i] += (wi/wt)*(X_[1*nd+i] - X[1*nd+i]);
+                    X[2*nd+i] += (wi/wt)*(X_[2*nd+i] - X[2*nd+i]);
+                    X[3*nd+i] += (wi/wt)*(X_[3*nd+i] - X[3*nd+i]);
+                }
+                
+                nn += nn_;
             }
             
             free(qr);
-            free(Wi);
-            free(Xi);
+#ifdef _OPENMP
+            free(db_);
+            free(ci_);
+            if(cj != ci)
+                free(cj_);
+            free(mj_);
+#endif
+            free(W_);
+            free(X_);
         }
         
         dt = difftime(time(NULL), st);
