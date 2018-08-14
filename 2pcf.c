@@ -53,7 +53,7 @@ const char* UNAME[NUM_UNITS] = {
 static const double PI_HALF = 1.5707963267948966192;
 static const double TWO_PI = 6.2831853071795864769;
 
-static void nsincos(int n, double x, double y, double* s, double* c)
+static inline void nsincos(int n, double x, double y, double* s, double* c)
 {
     double h;
     
@@ -246,12 +246,13 @@ int mapsort(const void* a, const void* b)
     return 0;
 }
 
-int index(double x, double y, double dx, double dy, int w)
+static inline int index(double x, double y, double dx, double dy, int w)
 {
     return (int)(y/dy)*w + (int)(x/dx);
 }
 
-void query(int k, int w, int h, int dy, const int dx[], int* qc, int qv[])
+static inline void query(int k, int w, int h, int dy, const int dx[],
+                                                        int* qc, int qv[])
 {
     const int i0 = k/w;
     const int il = i0 > dy ? i0-dy : 0;
@@ -259,7 +260,7 @@ void query(int k, int w, int h, int dy, const int dx[], int* qc, int qv[])
     
     const int j = k%w;
     
-    int r = 0, qb = -1;
+    int n = 0, qq = -1;
     
     for(int i = il; i < ih; ++i)
     {
@@ -273,22 +274,22 @@ void query(int k, int w, int h, int dy, const int dx[], int* qc, int qv[])
             
             if(ql < qh)
             {
-                if(ql == qb)
-                    qb = (qv[2*r-1] = qh);
+                if(ql == qq)
+                    qq = (qv[2*n-1] = qh);
                 else
-                    qb = (qv[2*r+0] = ql, qv[2*r+1] = qh), ++r;
+                    qq = (qv[2*n+0] = ql, qv[2*n+1] = qh), ++n;
             }
             else
             {
-                if(q0 == qb)
-                    qb = (qv[2*r-1] = qh);
+                if(q0 == qq)
+                    qq = (qv[2*n-1] = qh);
                 else
-                    qb = (qv[2*r+0] = q0, qv[2*r+1] = qh), ++r;
+                    qq = (qv[2*n+0] = q0, qv[2*n+1] = qh), ++n;
                 
-                if(ql == qb)
-                    qb = (qv[2*r-1] = qw);
+                if(ql == qq)
+                    qq = (qv[2*n-1] = qw);
                 else
-                    qb = (qv[2*r+0] = ql, qv[2*r+1] = qw), ++r;
+                    qq = (qv[2*n+0] = ql, qv[2*n+1] = qw), ++n;
             }
         }
         else
@@ -297,14 +298,14 @@ void query(int k, int w, int h, int dy, const int dx[], int* qc, int qv[])
             const int ql = q0 + (j > di ? j-di : 0);
             const int qh = q0 + (j+di < w ? j+di+1 : w);
             
-            if(ql == qb)
-                qb = (qv[2*r-1] = qh);
+            if(ql == qq)
+                qq = (qv[2*n-1] = qh);
             else
-                qb = (qv[2*r+0] = ql, qv[2*r+1] = qh), ++r;
+                qq = (qv[2*n+0] = ql, qv[2*n+1] = qh), ++n;
         }
     }
     
-    *qc = r;
+    *qc = n;
 }
 
 int main(int argc, char* argv[])
@@ -878,6 +879,7 @@ int main(int argc, char* argv[])
             double* Wi;
             double* Xi;
             
+            nq = 0;
             qr = malloc((2*dy+1)*4*sizeof(int));
             if(!qr)
             {
