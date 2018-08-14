@@ -340,7 +340,8 @@ int main(int argc, char* argv[])
     
     bool pt, xc, ls, rd;
     size_t nd;
-    double dl, dh, sdh, dL, dH, dm, d0;
+    double dl, dh, sdh;
+    double* db;
     double ui, uo;
     int S1, S2;
     
@@ -550,25 +551,22 @@ int main(int argc, char* argv[])
     
     sdh = sin(dh);
     
-    dL = dl;
-    dH = dh;
-    if(rd)
+    db = malloc((nd+1)*sizeof(double));
+    if(!db)
     {
-        dL = 2*sin(0.5*dL);
-        dH = 2*sin(0.5*dH);
+        perror(NULL);
+        abort();
     }
-    dL = dL*dL;
-    dH = dH*dH;
     
-    if(ls)
+    for(i = 0; i <= nd; ++i)
     {
-        d0 = log(dl);
-        dm = nd/(log(dh) - d0);
-    }
-    else
-    {
-        d0 = dl;
-        dm = nd/(dh - d0);
+        if(ls)
+            db[i] = exp(log(dl) + i*(log(dh) - log(dl))/nd);
+        else
+            db[i] = dl + i*(dh - dl)/nd;
+        if(rd)
+            db[i] = 2*sin(0.5*db[i]);
+        db[i] = db[i]*db[i];
     }
     
     S1 = cfg.spin1 ? cfg.spin1 - 1 : 0;
@@ -869,8 +867,8 @@ int main(int argc, char* argv[])
         nn = 0;
         
         #pragma omp parallel default(none) shared(st, dt, ii, nn, W, X, qQ) \
-            private(i, j, nj) firstprivate(pt, xc, rd, ls, nd, dL, dH, d0, \
-                dm, gw, gh, dx, dy, p, ni, ci, cj, mj, Si, Sj, stdout)
+            private(i, j, nj) firstprivate(pt, xc, rd, ls, nd, db, gw, gh, \
+                dx, dy, p, ni, ci, cj, mj, Si, Sj, stdout)
         {
             size_t qi;
             int q, nq;
@@ -967,16 +965,12 @@ int main(int argc, char* argv[])
                         
                         double d = d1*d1 + d2*d2 + d3*d3;
                         
-                        if(d < dL || d >= dH)
+                        if(d < db[0] || d >= db[nd])
                             continue;
                         
-                        d = sqrt(d);
-                        if(rd)
-                            d = 2*asin(0.5*d);
-                        if(ls)
-                            d = log(d);
-                        
-                        const int n = dm*(d - d0);
+                        size_t n = 0;
+                        while(db[n+1] <= d)
+                            ++n;
                         
                         const double ww = wi*wj;
                         
@@ -1065,9 +1059,11 @@ int main(int argc, char* argv[])
     {
         double d;
         
-        d = d0 + (i + 0.5)/dm;
         if(ls)
-            d = exp(d);
+            d = exp(log(dl) + (i + 0.5)*(log(dh) - log(dl))/nd);
+        else
+            d = dl + (i + 0.5)*(dh - dl)/nd;
+        
         d /= uo;
         
         if(pt)
