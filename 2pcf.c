@@ -308,6 +308,20 @@ static inline void query(int k, int w, int h, int dy, const int dx[],
     *qc = n;
 }
 
+static inline size_t upper_bound(double x, const double v[], size_t n)
+{
+    size_t i = 0;
+    while(n > 0)
+    {
+        const size_t m = n/2;
+        const size_t j = i+n-m;
+        const double u = v[i+m];
+        n = m;
+        i = x < u ? i : j;
+    }
+    return i;
+}
+
 int main(int argc, char* argv[])
 {
     FILE* fp;
@@ -985,9 +999,7 @@ int main(int argc, char* argv[])
                         if(d < db_[0] || d >= db_[nd])
                             continue;
                         
-                        size_t n = 0;
-                        while(db[n+1] <= d)
-                            ++n;
+                        const size_t n = upper_bound(d, db+1, nd-1);
                         
                         const double ww = wi*wj;
                         
