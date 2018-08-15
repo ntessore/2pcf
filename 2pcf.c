@@ -352,7 +352,7 @@ int main(int argc, char* argv[])
         double gridy;
     } cfg;
     
-    bool pt, xc, ls, rd;
+    bool pt, xc, ls, rd, tc;
     size_t nd;
     double dl, dh, sdh;
     double* db;
@@ -585,6 +585,12 @@ int main(int argc, char* argv[])
     
     S1 = cfg.spin1 ? cfg.spin1 - 1 : 0;
     S2 = cfg.spin2 ? cfg.spin2 - 1 : S1;
+    
+#ifdef _OPENMP
+    tc = true;
+#else
+    tc = false;
+#endif
     
     printf("\n");
     printf("configuration ... %s\n", infile);
@@ -869,8 +875,8 @@ int main(int argc, char* argv[])
         nn = 0;
         
         #pragma omp parallel default(none) shared(st, dt, nn, W, X, qQ) \
-            private(i, j) firstprivate(pt, xc, rd, nd, db, ng, gw, gh, dx, \
-                dy, p, ni, nj, ci, cj, mj, Si, Sj, stdout)
+            private(i, j) firstprivate(pt, xc, rd, tc, nd, db, ng, gw, gh, \
+                dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, stdout)
         {
             size_t qi;
             int q, nq;
@@ -893,30 +899,33 @@ int main(int argc, char* argv[])
                 abort();
             }
             
-#ifdef _OPENMP
-            db_ = malloc((nd+1)*sizeof(double));
-            ci_ = malloc(ni*DW*sizeof(double));
-            if(cj != ci)
-                cj_ = malloc(nj*DW*sizeof(double));
-            else
-                cj_ = ci_;
-            mj_ = malloc((ng+1)*sizeof(int));
-            if(!db_ || !ci_ || !cj_ || !mj_)
+            if(tc)
             {
-                perror(NULL);
-                abort();
+                db_ = malloc((nd+1)*sizeof(double));
+                ci_ = malloc(ni*DW*sizeof(double));
+                if(cj != ci)
+                    cj_ = malloc(nj*DW*sizeof(double));
+                else
+                    cj_ = ci_;
+                mj_ = malloc((ng+1)*sizeof(int));
+                if(!db_ || !ci_ || !cj_ || !mj_)
+                {
+                    perror(NULL);
+                    abort();
+                }
+                memcpy(db_, db, (nd+1)*sizeof(double));
+                memcpy(ci_, ci, ni*DW*sizeof(double));
+                if(cj != ci)
+                    memcpy(cj_, cj, nj*DW*sizeof(double));
+                memcpy(mj_, mj, (ng+1)*sizeof(int));
             }
-            memcpy(db_, db, (nd+1)*sizeof(double));
-            memcpy(ci_, ci, ni*DW*sizeof(double));
-            if(cj != ci)
-                memcpy(cj_, cj, nj*DW*sizeof(double));
-            memcpy(mj_, mj, (ng+1)*sizeof(int));
-#else
-            db_ = db;
-            ci_ = ci;
-            cj_ = cj;
-            mj_ = mj;
-#endif
+            else
+            {
+                db_ = db;
+                ci_ = ci;
+                cj_ = cj;
+                mj_ = mj;
+            }
             
             W_ = calloc(nd, sizeof(double));
             X_ = calloc(4*nd, sizeof(double));
@@ -1063,15 +1072,17 @@ int main(int argc, char* argv[])
             }
             
             free(qr);
-#ifdef _OPENMP
-            free(db_);
-            free(ci_);
-            if(cj != ci)
-                free(cj_);
-            free(mj_);
-#endif
             free(W_);
             free(X_);
+            
+            if(tc)
+            {
+                free(db_);
+                free(ci_);
+                if(cj != ci)
+                    free(cj_);
+                free(mj_);
+            }
         }
         
         dt = difftime(time(NULL), st);
