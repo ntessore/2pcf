@@ -10,6 +10,10 @@ else
 CFLAGS += -Ofast
 endif
 
+ifdef OPENMP
+CFLAGS += -fopenmp
+endif
+
 .PHONY: all clean
 
 all: 2pcf

@@ -1,7 +1,7 @@
 ## set custom settings here
 
 ## compiler
-# CC = gcc-8
+#CC = gcc-8
 
-## build with OpenMP support
-# CFLAGS += -fopenmp
+## build with OpenMP support (-fopenmp)
+#OPENMP = 1
