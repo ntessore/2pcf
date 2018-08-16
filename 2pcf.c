@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <string.h>
 #include <math.h>
 #include <time.h>
 #include <signal.h>
@@ -17,44 +16,6 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
-
-#ifndef LINELEN
-#define LINELEN 1024
-#endif
-
-enum { MODE_NONE, MODE_POINTS, MODE_FIELD };
-enum { SPACING_LIN, SPACING_LOG };
-enum { COORDS_FLAT, COORDS_LONLAT };
-enum { FIELD_REAL, FIELD_COMPLEX };
-enum { SIGNS_PP, SIGNS_PM, SIGNS_MP, SIGNS_MM };
-
-enum {
-    UNIT_RAD,
-    UNIT_DEG,
-    UNIT_ARCMIN,
-    UNIT_ARCSEC,
-    /*-------*/
-    NUM_UNITS
-};
-
-const double UCONV[NUM_UNITS] = {
-    1.0,
-    0.017453292519943295769,
-    0.00029088820866572159615,
-    0.0000048481368110953599359
-};
-
-const char* UNAME[NUM_UNITS] = {
-    "rad",
-    "deg",
-    "arcmin",
-    "arcsec"
-};
-
-const char* CNAME[] = {
-    "flat",
-    "lon, lat"
-};
 
 static const double PI_HALF = 1.5707963267948966192;
 static const double TWO_PI = 6.2831853071795864769;
@@ -105,127 +66,6 @@ static inline void nsincos(int n, double x, double y, double* s, double* c)
 }
 
 static const int DW = 8;
-
-double* readc(const char* f, double ui, bool pt, bool cf, int sg, size_t* n)
-{
-    FILE* fp;
-    int l;
-    char buf[LINELEN];
-    size_t i, a;
-    double* d;
-    char* sx;
-    char* sy;
-    char* su;
-    char* sv;
-    char* sw;
-    double x, y, u, v, w;
-    
-    fp = fopen(f, "r");
-    if(!fp)
-    {
-        perror(f);
-        exit(EXIT_FAILURE);
-    }
-    
-    i = 0;
-    a = 1;
-    
-    d = malloc(a*DW*sizeof(double));
-    if(!d)
-    {
-        perror(NULL);
-        abort();
-    }
-    
-    for(l = 1; fgets(buf, sizeof buf, fp); ++l)
-    {
-        sx = strtok(buf, " \t\r\n");
-        sy = strtok(NULL, " \t\r\n");
-        su = !pt ? strtok(NULL, " \t\r\n") : NULL;
-        sv = !pt && cf ? strtok(NULL, " \t\r\n") : NULL;
-        sw = strtok(NULL, " \t\r\n");
-        
-        if(!sx || *sx == '#')
-            continue;
-        
-        if(!sy || *sy == '#')
-        {
-            fprintf(stderr, "error: %s:%d: missing `y` value\n", f, l);
-            exit(EXIT_FAILURE);
-        }
-        
-        x = atof(sx)*ui;
-        y = atof(sy)*ui;
-        
-        if(!pt)
-        {
-            if(!su || *su == '#')
-            {
-                fprintf(stderr, "error: %s:%d: missing `u` value\n", f, l);
-                exit(EXIT_FAILURE);
-            }
-            
-            u = atof(su);
-            
-            if(cf)
-            {
-                if(!sv || *sv == '#')
-                {
-                    fprintf(stderr, "error: %s:%d: missing `v` value\n", f, l);
-                    exit(EXIT_FAILURE);
-                }
-                
-                v = atof(sv);
-            }
-            else
-                v = 0;
-        }
-        else
-        {
-            u = 0;
-            v = 0;
-        }
-        
-        if(!sw || *sw == '#')
-            w = 1;
-        else
-            w = atof(sw);
-        
-        d[i*DW+0] = x;
-        d[i*DW+1] = y;
-        d[i*DW+2] = 1;
-        d[i*DW+3] = 1;
-        d[i*DW+4] = sg&2 ? -u : u;
-        d[i*DW+5] = sg&1 ? -v : v;
-        d[i*DW+6] = w;
-        
-        i += 1;
-        
-        if(i == a)
-        {
-            a *= 2;
-            d = realloc(d, a*DW*sizeof(double));
-            if(!d)
-            {
-                perror(NULL);
-                abort();
-            }
-        }
-    }
-    
-    fclose(fp);
-    
-    d = realloc(d, i*DW*sizeof(double));
-    if(!d)
-    {
-        perror(NULL);
-        abort();
-    }
-    
-    *n = i;
-    
-    return d;
-}
 
 volatile sig_atomic_t fb;
 volatile sig_atomic_t qQ;
@@ -332,37 +172,12 @@ static inline size_t upper_bound(double x, const double v[], size_t n)
     return i;
 }
 
+#include "io.c" // yes, really
+
 int main(int argc, char* argv[])
 {
-    FILE* fp;
-    
-    const char* infile;
-    char buf[LINELEN];
-    size_t line;
-    char* key;
-    char* val;
-    
-    struct {
-        int mode;
-        char catalog1[LINELEN];
-        char catalog2[LINELEN];
-        int dunit;
-        int coords;
-        int field1;
-        int field2;
-        int spin1;
-        int spin2;
-        int signs1;
-        int signs2;
-        char output[LINELEN];
-        int nth;
-        double thmin;
-        double thmax;
-        int thunit;
-        int spacing;
-        double gridx;
-        double gridy;
-    } cfg;
+    const char* cfgfile;
+    struct config cfg;
     
     bool pt, xc, ls, sc, tc;
     size_t nd;
@@ -401,217 +216,20 @@ int main(int argc, char* argv[])
     if(argc > 2)
         goto err_usage;
     
-    infile = argc > 1 ? argv[1] : "2pcf.cfg";
-    
-    fp = fopen(infile, "r");
-    if(!fp)
-    {
-        perror(infile);
-        return EXIT_FAILURE;
-    }
-    
-    memset(&cfg, 0, sizeof cfg);
-    
-    for(line = 1; fgets(buf, sizeof(buf), fp); ++line)
-    {
-        key = strtok(buf, " \t\r\n");
-        val = strtok(NULL, " \t\r\n");
-        
-        if(!key || *key == '#')
-            continue;
-        if(!val || *val == '#')
-            goto err_cfg_no_value;
-        
-        if(strcmp(key, "mode") == 0)
-        {
-            if(strcmp(val, "points") == 0)
-                cfg.mode = MODE_POINTS;
-            else if(strcmp(val, "field") == 0)
-                cfg.mode = MODE_FIELD;
-            else
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "catalog") == 0)
-            strncpy(cfg.catalog1, val, sizeof cfg.catalog1);
-        else if(strcmp(key, "catalog1") == 0)
-            strncpy(cfg.catalog1, val, sizeof cfg.catalog1);
-        else if(strcmp(key, "catalog2") == 0)
-            strncpy(cfg.catalog2, val, sizeof cfg.catalog2);
-        else if(strcmp(key, "dunit") == 0)
-        {
-            for(cfg.dunit = 0; cfg.dunit < NUM_UNITS; ++cfg.dunit)
-                if(strcmp(val, UNAME[cfg.dunit]) == 0)
-                    break;
-            if(cfg.dunit == NUM_UNITS)
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "coords") == 0)
-        {
-            if(strcmp(val, "flat") == 0)
-                cfg.coords = COORDS_FLAT;
-            else if(strcmp(val, "lonlat") == 0)
-                cfg.coords = COORDS_LONLAT;
-            else
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "field") == 0)
-        {
-            if(strcmp(val, "real") == 0)
-                cfg.field1 = FIELD_REAL;
-            else if(strcmp(val, "complex") == 0)
-                cfg.field1 = FIELD_COMPLEX;
-            else
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "field1") == 0)
-        {
-            if(strcmp(val, "real") == 0)
-                cfg.field1 = FIELD_REAL;
-            else if(strcmp(val, "complex") == 0)
-                cfg.field1 = FIELD_COMPLEX;
-            else
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "field2") == 0)
-        {
-            if(strcmp(val, "real") == 0)
-                cfg.field2 = FIELD_REAL;
-            else if(strcmp(val, "complex") == 0)
-                cfg.field2 = FIELD_COMPLEX;
-            else
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "spin") == 0)
-        {
-            cfg.spin1 = atoi(val) + 1;
-            if(cfg.spin1 < 1)
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "spin1") == 0)
-        {
-            cfg.spin1 = atoi(val) + 1;
-            if(cfg.spin1 < 1)
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "spin2") == 0)
-        {
-            cfg.spin2 = atoi(val) + 1;
-            if(cfg.spin2 < 1)
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "signs") == 0)
-        {
-            if(strcmp(val, "+") == 0)
-                cfg.signs1 = cfg.signs2 = SIGNS_PP;
-            else if(strcmp(val, "-") == 0)
-                cfg.signs1 = cfg.signs2 = SIGNS_MM;
-            else if(strcmp(val, "++") == 0)
-                cfg.signs1 = cfg.signs2 = SIGNS_PP;
-            else if(strcmp(val, "+-") == 0)
-                cfg.signs1 = cfg.signs2 = SIGNS_PM;
-            else if(strcmp(val, "-+") == 0)
-                cfg.signs1 = cfg.signs2 = SIGNS_MP;
-            else if(strcmp(val, "--") == 0)
-                cfg.signs1 = cfg.signs2 = SIGNS_MM;
-            else
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "signs1") == 0)
-        {
-            if(strcmp(val, "+") == 0)
-                cfg.signs1 = SIGNS_PP;
-            else if(strcmp(val, "-") == 0)
-                cfg.signs1 = SIGNS_MM;
-            else if(strcmp(val, "++") == 0)
-                cfg.signs1 = SIGNS_PP;
-            else if(strcmp(val, "+-") == 0)
-                cfg.signs1 = SIGNS_PM;
-            else if(strcmp(val, "-+") == 0)
-                cfg.signs1 = SIGNS_MP;
-            else if(strcmp(val, "--") == 0)
-                cfg.signs1 = SIGNS_MM;
-            else
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "signs2") == 0)
-        {
-            if(strcmp(val, "+") == 0)
-                cfg.signs2 = SIGNS_PP;
-            else if(strcmp(val, "-") == 0)
-                cfg.signs2 = SIGNS_MM;
-            else if(strcmp(val, "++") == 0)
-                cfg.signs2 = SIGNS_PP;
-            else if(strcmp(val, "+-") == 0)
-                cfg.signs2 = SIGNS_PM;
-            else if(strcmp(val, "-+") == 0)
-                cfg.signs2 = SIGNS_MP;
-            else if(strcmp(val, "--") == 0)
-                cfg.signs2 = SIGNS_MM;
-            else
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "output") == 0)
-            strncpy(cfg.output, val, sizeof cfg.output);
-        else if(strcmp(key, "nth") == 0)
-            cfg.nth = atoi(val);
-        else if(strcmp(key, "thmin") == 0)
-            cfg.thmin = atof(val);
-        else if(strcmp(key, "thmax") == 0)
-            cfg.thmax = atof(val);
-        else if(strcmp(key, "thunit") == 0)
-        {
-            for(cfg.thunit = 0; cfg.thunit < NUM_UNITS; ++cfg.thunit)
-                if(strcmp(val, UNAME[cfg.thunit]) == 0)
-                    break;
-            if(cfg.thunit == NUM_UNITS)
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "spacing") == 0)
-        {
-            if(strcmp(val, "lin") == 0)
-                cfg.spacing = SPACING_LIN;
-            else if(strcmp(val, "log") == 0)
-                cfg.spacing = SPACING_LOG;
-            else
-                goto err_cfg_bad_value;
-        }
-        else if(strcmp(key, "gridx") == 0)
-            cfg.gridx = atof(val);
-        else if(strcmp(key, "gridy") == 0)
-            cfg.gridy = atof(val);
-        else
-            goto err_cfg_bad_key;
-    }
-    
-    fclose(fp);
-    
-    if(cfg.mode == MODE_NONE)
-        { key = "mode"; goto err_cfg_missing_key; }
-    if(!strlen(cfg.catalog1))
-        { key = "catalog"; goto err_cfg_missing_key; }
-    if(!strlen(cfg.output))
-        { key = "output"; goto err_cfg_missing_key; }
-    if(!cfg.nth)
-        { key = "nth"; goto err_cfg_missing_key; }
-    if(!cfg.thmin)
-        { key = "thmin"; goto err_cfg_missing_key; }
-    if(!cfg.thmax)
-        { key = "thmax"; goto err_cfg_missing_key; }
-    
-    if(cfg.gridx <= 0)
-        cfg.gridx = 0.1;
-    if(cfg.gridy <= 0)
-        cfg.gridy = 0.1;
-    
-    if(cfg.spin1)
-        cfg.field1 = FIELD_COMPLEX;
-    if(cfg.spin2 || cfg.spin1)
-        cfg.field2 = FIELD_COMPLEX;
+    cfgfile = argc > 1 ? argv[1] : "2pcf.cfg";
+    readcfg(cfgfile, &cfg);
+    printcfg(cfgfile, &cfg);
     
     pt = cfg.mode == MODE_POINTS;
-    xc = !!strlen(cfg.catalog2);
+    xc = cfg.catalog2 != NULL;
     sc = cfg.coords != COORDS_FLAT;
     ls = cfg.spacing == SPACING_LOG;
+    
+#ifdef _OPENMP
+    tc = true;
+#else
+    tc = false;
+#endif
     
     if(pt && !xc)
     {
@@ -630,10 +248,7 @@ int main(int argc, char* argv[])
     
     db = malloc((nd+1)*sizeof(double));
     if(!db)
-    {
-        perror(NULL);
-        abort();
-    }
+        goto err_alloc;
     
     for(i = 0; i <= nd; ++i)
     {
@@ -646,96 +261,12 @@ int main(int argc, char* argv[])
         db[i] = db[i]*db[i];
     }
     
-    S1 = cfg.spin1 ? cfg.spin1 - 1 : 0;
-    S2 = cfg.spin2 ? cfg.spin2 - 1 : S1;
-    
-#ifdef _OPENMP
-    tc = true;
-#else
-    tc = false;
-#endif
-    
-    printf("\n");
-    printf("configuration ... %s\n", infile);
-    printf("\n");
-    printf("input type ...... %s\n", pt ? "points" : "field");
-    if(pt)
-    {
-        printf("data catalog .... %s\n", cfg.catalog1);
-        printf("random catalog .. %s\n", cfg.catalog2);
-    }
-    else if(!xc)
-        printf("catalog ......... %s\n", cfg.catalog1);
-    else
-    {
-        printf("catalog 1 ....... %s\n", cfg.catalog1);
-        printf("catalog 2 ....... %s\n", cfg.catalog2);
-    }
-    printf("data units ...... %s\n", UNAME[cfg.dunit]);
-    printf("coordinates ..... %s\n", CNAME[cfg.coords]);
-    if(!pt)
-    {
-        if(!xc)
-        {
-            if(cfg.field1)
-            {
-                printf("field type ...... complex spin-%d\n", S1);
-                printf("signature ....... %su %s i v\n",
-                        cfg.signs1&2 ? "-" : "", cfg.signs1&1 ? "-" : "+");
-            }
-            else
-            {
-                printf("field type ...... real\n");
-                printf("signature ....... %su\n", cfg.signs1&2 ? "-" : "+");
-            }
-        }
-        else
-        {
-            if(cfg.field1)
-            {
-                printf("field 1 type .... complex spin-%d\n", S1);
-                printf("signature 1 ..... %su %s i v\n",
-                        cfg.signs1&2 ? "-" : "", cfg.signs1&1 ? "-" : "+");
-            }
-            else
-            {
-                printf("field 1 type .... real\n");
-                printf("signature 1 ..... %su\n", cfg.signs1&2 ? "-" : "+");
-            }
-            if(cfg.field2)
-            {
-                printf("field 2 type .... complex spin-%d\n", S2);
-                printf("signature 2 ..... %su %s i v\n",
-                        cfg.signs2&2 ? "-" : "", cfg.signs2&1 ? "-" : "+");
-            }
-            else
-            {
-                printf("field 2 type .... real\n");
-                printf("signature 2 ...... %su\n", cfg.signs2&2 ? "-" : "+");
-            }
-        }
-    }
-    printf("\n");
-    printf("output file ..... %s\n", cfg.output);
-    printf("bin count ....... %u\n", cfg.nth);
-    printf("bin range ....... %lg to %lg %s\n",
-                                    cfg.thmin, cfg.thmax, UNAME[cfg.thunit]);
-    printf("bin spacing ..... %s\n", ls ? "logarithmic" : "linear");
-    printf("\n");
-    if(sc)
-    {
-        printf("grid size ....... %g x %g deg^2\n", cfg.gridx, cfg.gridy);
-        printf("\n");
-    }
+    S1 = cfg.spin1;
+    S2 = cfg.spin2;
     
     printf("reading %s\n", pt ? "data catalog" : xc ? "catalog 1" : "catalog");
     
     c1 = readc(cfg.catalog1, ui, pt, cfg.field1, cfg.signs1, &n1);
-    if(!c1)
-    {
-        fprintf(stderr, "error: could not read %s\n", cfg.catalog1);
-        return EXIT_FAILURE;
-    }
     
     printf("> done with %zu points\n", n1);
     printf("\n");
@@ -745,11 +276,6 @@ int main(int argc, char* argv[])
         printf("reading %s\n", pt ? "random catalog" : "catalog 2");
         
         c2 = readc(cfg.catalog2, ui, pt, cfg.field2, cfg.signs2, &n2);
-        if(!c2)
-        {
-            fprintf(stderr, "error: could not read %s\n", cfg.catalog2);
-            return EXIT_FAILURE;
-        }
         
         printf("> done with %zu points\n", n2);
         printf("\n");
@@ -809,10 +335,7 @@ int main(int argc, char* argv[])
     dy = ceil(dh/gy);
     dx = malloc(gh*sizeof(int));
     if(!dx)
-    {
-        perror(NULL);
-        abort();
-    }
+        goto err_alloc;
     
     if(sc)
     {
@@ -831,10 +354,7 @@ int main(int argc, char* argv[])
     
     m1 = malloc((ng+1)*sizeof(int));
     if(!m1)
-    {
-        perror(NULL);
-        abort();
-    }
+        goto err_alloc;
     
     for(i = 0; i < n1; ++i)
         c1[i*DW+7] = index(c1[i*DW+0] - xl, c1[i*DW+1] - yl, gx, gy, gw);
@@ -853,10 +373,7 @@ int main(int argc, char* argv[])
     {
         m2 = malloc((ng+1)*sizeof(int));
         if(!m2)
-        {
-            perror(NULL);
-            abort();
-        }
+            goto err_alloc;
         
         for(i = 0; i < n2; ++i)
             c2[i*DW+7] = index(c2[i*DW+0] - xl, c2[i*DW+1] - yl, gx, gy, gw);
@@ -894,10 +411,7 @@ int main(int argc, char* argv[])
     W = calloc(3*nd, sizeof(double));
     X = calloc(4*nd, sizeof(double));
     if(!W || !X)
-    {
-        perror(NULL);
-        abort();
-    }
+        goto err_alloc;
     
     signal(SIGQUIT, handler);
     qQ = 0;
@@ -942,14 +456,11 @@ int main(int argc, char* argv[])
         {
             printf("calculating correlations\n");
             
-            ci = c1;
-            ni = n1;
-            Si = S1;
-            
-            cj = xc ? c2 : c1;
-            nj = xc ? n2 : n1;
-            mj = xc ? m2 : m1;
-            Sj = xc ? S2 : S1;
+            ci = c1, ni = n1, Si = S1;
+            if(xc)
+                cj = c2, nj = n2, mj = m2, Sj = S2;
+            else
+                cj = c1, nj = n1, mj = m1, Sj = S1;
         }
         
         st = time(NULL);
@@ -978,10 +489,7 @@ int main(int argc, char* argv[])
             nq = 0;
             qr = malloc((2*dy+1)*4*sizeof(int));
             if(!qr)
-            {
-                perror(NULL);
-                abort();
-            }
+                perror(NULL), abort();
             
             if(tc)
             {
@@ -993,10 +501,8 @@ int main(int argc, char* argv[])
                     cj_ = ci_;
                 mj_ = malloc((ng+1)*sizeof(int));
                 if(!db_ || !ci_ || !cj_ || !mj_)
-                {
-                    perror(NULL);
-                    abort();
-                }
+                    perror(NULL), abort();
+                
                 memcpy(db_, db, (nd+1)*sizeof(double));
                 memcpy(ci_, ci, ni*DW*sizeof(double));
                 if(cj != ci)
@@ -1014,10 +520,7 @@ int main(int argc, char* argv[])
             W_ = calloc(nd, sizeof(double));
             X_ = calloc(4*nd, sizeof(double));
             if(!W_ || !X_)
-            {
-                perror(NULL);
-                abort();
-            }
+                perror(NULL), abort();
             
             #pragma omp master
             {
@@ -1109,7 +612,7 @@ int main(int argc, char* argv[])
                             // e^{I phi_ij} unnormalised
                             cij = cyi*syj - syi*cyj*cdx;
                             sij = -cyj*sdx;
-                             // cij + I sij = e^{I Si phi_ij}
+                            // cij + I sij = e^{I Si phi_ij}
                             nsincos(Si, cij, sij, &sij, &cij);
                             // ai + I bi = (ui + I vi) e^{-I Si phi_i}
                             cmul(ui, vi, cij, -sij, &ai, &bi);
@@ -1179,64 +682,21 @@ int main(int argc, char* argv[])
         printf("\n");
     }
     
-    fp = fopen(cfg.output, "w");
-    if(!fp)
-    {
-        perror(cfg.output);
-        return EXIT_FAILURE;
-    }
-    
     if(pt)
-        fprintf(fp, "%-25s %-25s %-25s %-25s %-25s\n",
-                                        "# theta", "xi", "DD", "DR", "RR");
-    else
-        fprintf(fp, "%-25s %-25s %-25s %-25s %-25s\n",
-                                "# theta", "xip", "xim", "xip_im", "xim_im");
-    
-    for(i = 0; i < nd; ++i)
     {
-        double d;
+        const size_t ndd = n1*(n1-1)/2;
+        const size_t ndr = n1*n2;
+        const size_t nrr = n2*(n2-1)/2;
         
-        if(ls)
-            d = exp(log(dl) + (i + 0.5)*(log(dh) - log(dl))/nd);
-        else
-            d = dl + (i + 0.5)*(dh - dl)/nd;
-        
-        d /= uo;
-        
-        if(pt)
+        for(i = 0; i < nd; ++i)
         {
-            size_t ndd, ndr, nrr;
-            double dd, dr, rr, xi;
-            
-            ndd = n1*(n1-1)/2;
-            ndr = n1*n2;
-            nrr = n2*(n2-1)/2;
-            
-            dd = W[0*nd+i]/ndd;
-            dr = W[1*nd+i]/ndr;
-            rr = W[2*nd+i]/nrr;
-            
-            xi = (dd - 2*dr + rr)/rr;
-            
-            fprintf(fp, "% .18e % .18e % .18e % .18e % .18e \n",
-                                                        d, xi, dd, dr, rr);
-        }
-        else
-        {
-            double xip_re, xim_re, xip_im, xim_im;
-            
-            xip_re = X[0*nd+i];
-            xim_re = X[1*nd+i];
-            xip_im = X[2*nd+i];
-            xim_im = X[3*nd+i];
-            
-            fprintf(fp, "% .18e % .18e % .18e % .18e % .18e\n",
-                                        d, xip_re, xim_re, xip_im, xim_im);
+            W[0*nd+i] /= ndd;
+            W[1*nd+i] /= ndr;
+            W[2*nd+i] /= nrr;
         }
     }
     
-    fclose(fp);
+    writexi(cfg.output, nd, dl, dh, ls, uo, pt, W, X);
     
     free(W);
     free(X);
@@ -1246,25 +706,15 @@ int main(int argc, char* argv[])
     free(c2);
     free(dx);
     
+    freecfg(&cfg);
+    
     return EXIT_SUCCESS;
     
 err_usage:
     fprintf(stderr, "usage: 2pcf [FILE]\n");
     return EXIT_FAILURE;
     
-err_cfg_bad_key:
-    fprintf(stderr, "error: %s:%zu: invalid key `%s`\n", infile, line, key);
-    return EXIT_FAILURE;
-    
-err_cfg_missing_key:
-    fprintf(stderr, "error: %s: missing required `%s` key\n", infile, key);
-    return EXIT_FAILURE;
-    
-err_cfg_no_value:
-    fprintf(stderr, "error: %s:%zu: missing value\n", infile, line);
-    return EXIT_FAILURE;
-    
-err_cfg_bad_value:
-    fprintf(stderr, "error: %s:%zu: invalid value `%s`\n", infile, line, val);
+err_alloc:
+    perror(NULL);
     return EXIT_FAILURE;
 }

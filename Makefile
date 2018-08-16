@@ -21,5 +21,5 @@ all: 2pcf
 clean:
 	$(RM) 2pcf
 
-2pcf: 2pcf.c
-	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
+2pcf: 2pcf.c io.c
+	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $< $(LDLIBS)
