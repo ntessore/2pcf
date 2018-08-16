@@ -199,17 +199,19 @@ int main(int argc, char* argv[])
     int* m1;
     int* m2;
     
+    double* N;
     double* W;
     double* X;
     
     int p, np;
     time_t st;
     int dt;
-    size_t ni, nj, nn;
+    size_t ni, nj;
     double* ci;
     double* cj;
     int* mj;
     int Si, Sj;
+    double nn;
     
     size_t i, j;
     
@@ -408,15 +410,29 @@ int main(int argc, char* argv[])
         }
     }
     
-    W = calloc(3*nd, sizeof(double));
-    X = calloc(4*nd, sizeof(double));
-    if(!W || !X)
-        goto err_alloc;
+    if(pt)
+    {
+        np = 3;
+        N = calloc(nd*np, sizeof(double));
+        W = calloc(nd*np, sizeof(double));
+        X = NULL;
+        if(!N || !W)
+            goto err_alloc;
+    }
+    else
+    {
+        np = 1;
+        N = calloc(nd, sizeof(double));
+        W = calloc(nd, sizeof(double));
+        X = calloc(nd*4, sizeof(double));
+        if(!N || !W || !X)
+            goto err_alloc;
+    }
     
     signal(SIGQUIT, handler);
     qQ = 0;
     
-    for(p = 0, np = pt ? 3 : 1; p < np && !qQ; ++p)
+    for(p = 0; p < np && !qQ; ++p)
     {
         if(pt)
         {
@@ -467,8 +483,6 @@ int main(int argc, char* argv[])
         dt = 0;
         fb = 0;
         
-        nn = 0;
-        
         #pragma omp parallel default(none) shared(st, dt, nn, W, X, qQ) \
             private(i, j) firstprivate(pt, xc, sc, tc, nd, db, ng, gw, gh, \
                 dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, stdout)
@@ -482,7 +496,7 @@ int main(int argc, char* argv[])
             double* cj_;
             int* mj_;
             
-            size_t nn_;
+            double* N_;
             double* W_;
             double* X_;
             
@@ -517,9 +531,10 @@ int main(int argc, char* argv[])
                 mj_ = mj;
             }
             
+            N_ = calloc(nd, sizeof(double));
             W_ = calloc(nd, sizeof(double));
-            X_ = calloc(4*nd, sizeof(double));
-            if(!W_ || !X_)
+            X_ = X ? calloc(nd*4, sizeof(double)) : NULL;
+            if(!N_ || !W_ || (X && !X_))
                 perror(NULL), abort();
             
             #pragma omp master
@@ -529,7 +544,6 @@ int main(int argc, char* argv[])
             }
             
             qi = -1;
-            nn_ = 0;
             
             #pragma omp for schedule(static, 1) nowait
             for(i = 0; i < ni; ++i)
@@ -599,6 +613,7 @@ int main(int argc, char* argv[])
                         
                         const double ww = wi*wj;
                         
+                        N_[n] += 1;
                         W_[n] += ww;
                         
                         if(!pt)
@@ -635,8 +650,6 @@ int main(int argc, char* argv[])
                             X_[2*nd+n] += w*(xip_im - X_[2*nd+n]);
                             X_[3*nd+n] += w*(xim_im - X_[3*nd+n]);
                         }
-                        
-                        nn_ += 1;
                     }
                 }
             }
@@ -650,18 +663,23 @@ int main(int argc, char* argv[])
             {
                 for(i = 0; i < nd; ++i)
                 {
-                    const double wi = W_[i];
-                    const double wt = wi ? (W[p*nd+i] += wi) : 1;
-                    X[0*nd+i] += (wi/wt)*(X_[0*nd+i] - X[0*nd+i]);
-                    X[1*nd+i] += (wi/wt)*(X_[1*nd+i] - X[1*nd+i]);
-                    X[2*nd+i] += (wi/wt)*(X_[2*nd+i] - X[2*nd+i]);
-                    X[3*nd+i] += (wi/wt)*(X_[3*nd+i] - X[3*nd+i]);
+                    N[p*nd+i] += N_[i];
+                    W[p*nd+i] += W_[i];
+                    
+                    if(X)
+                    {
+                        const double w = W_[i] > 0 ? W_[i]/W[p*nd+i] : 0;
+                        
+                        X[0*nd+i] += w*(X_[0*nd+i] - X[0*nd+i]);
+                        X[1*nd+i] += w*(X_[1*nd+i] - X[1*nd+i]);
+                        X[2*nd+i] += w*(X_[2*nd+i] - X[2*nd+i]);
+                        X[3*nd+i] += w*(X_[3*nd+i] - X[3*nd+i]);
+                    }
                 }
-                
-                nn += nn_;
             }
             
             free(qr);
+            free(N_);
             free(W_);
             free(X_);
             
@@ -675,9 +693,13 @@ int main(int argc, char* argv[])
             }
         }
         
+        nn = 0;
+        for(i = 0; i < nd; ++i)
+            nn += N[p*nd+i];
+        
         dt = difftime(time(NULL), st);
         
-        printf("\r> done with %zu pairs", nn);
+        printf("\r> done with %.0f pairs", nn);
         printf(" in %02d:%02d:%02d  \n", dt/3600, (dt/60)%60, dt%60);
         printf("\n");
     }
@@ -696,7 +718,7 @@ int main(int argc, char* argv[])
         }
     }
     
-    writexi(cfg.output, nd, dl, dh, ls, uo, pt, W, X);
+    writexi(cfg.output, nd, dl, dh, ls, uo, pt, N, W, X);
     
     free(W);
     free(X);

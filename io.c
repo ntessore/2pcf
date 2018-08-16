@@ -502,7 +502,7 @@ err_alloc:
 }
 
 void writexi(const char* f, size_t n, double a, double b, bool ls,
-                                    double uo, bool pt, double* W, double* X)
+                        double uo, bool pt, double* N, double* W, double* X)
 {
     FILE* fp;
     size_t i;
@@ -512,11 +512,11 @@ void writexi(const char* f, size_t n, double a, double b, bool ls,
         goto err_fopen;
     
     if(pt)
-        fprintf(fp, "%-25s %-25s %-25s %-25s %-25s\n",
-                                        "# theta", "xi", "DD", "DR", "RR");
+        fprintf(fp, "%-25s %-25s %-25s %-25s %-25s %-25s\n",
+                                "# theta", "xi", "DD", "DR", "RR", "Npair");
     else
-        fprintf(fp, "%-25s %-25s %-25s %-25s %-25s\n",
-                                "# theta", "xip", "xim", "xip_im", "xim_im");
+        fprintf(fp, "%-25s %-25s %-25s %-25s %-25s %-25s\n",
+                        "# theta", "xip", "xim", "xip_im", "xim_im", "Npair");
     
     for(i = 0; i < n; ++i)
     {
@@ -531,24 +531,28 @@ void writexi(const char* f, size_t n, double a, double b, bool ls,
         
         if(X)
         {
+            double npairs = N[i];
+            
+            double xip_re = X[0*n+i];
+            double xim_re = X[1*n+i];
+            double xip_im = X[2*n+i];
+            double xim_im = X[3*n+i];
+            
+            fprintf(fp, "% .18e % .18e % .18e % .18e % .18e % .18e\n",
+                                d, xip_re, xim_re, xip_im, xim_im, npairs);
+        }
+        else
+        {
+            double np = N[i];
+            
             double dd = W[0*n+i];
             double dr = W[1*n+i];
             double rr = W[2*n+i];
             
             double xi = (dd - 2*dr + rr)/rr;
             
-            fprintf(fp, "% .18e % .18e % .18e % .18e % .18e \n",
-                                                        d, xi, dd, dr, rr);
-        }
-        else
-        {
-            double xip_re = X[0*n+i];
-            double xim_re = X[1*n+i];
-            double xip_im = X[2*n+i];
-            double xim_im = X[3*n+i];
-            
-            fprintf(fp, "% .18e % .18e % .18e % .18e % .18e\n",
-                                        d, xip_re, xim_re, xip_im, xim_im);
+            fprintf(fp, "% .18e % .18e % .18e % .18e % .18e % .18e\n",
+                                                    d, xi, dd, dr, rr, np);
         }
     }
     
