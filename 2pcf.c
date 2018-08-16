@@ -59,6 +59,16 @@ const char* CNAME[] = {
 static const double PI_HALF = 1.5707963267948966192;
 static const double TWO_PI = 6.2831853071795864769;
 
+static inline void cmul(double x, double y, double u, double v,
+                                                    double* re, double* im)
+{
+    const double k1 = x*(u + v);
+    const double k2 = v*(x + y);
+    const double k3 = u*(y - x);
+    *re = k1 - k2;
+    *im = k1 + k3;
+}
+
 static inline void nsincos(int n, double x, double y, double* s, double* c)
 {
     double h;
@@ -89,13 +99,7 @@ static inline void nsincos(int n, double x, double y, double* s, double* c)
         *c = x*x - y*y;
         *s = 2*x*y;
         for(int i = 2; i < n; ++i)
-        {
-            const double k1 = x*(*c + *s);
-            const double k2 = (x + y)*(*s);
-            const double k3 = (y - x)*(*c);
-            *c = k1 - k2;
-            *s = k1 + k3;
-        }
+            cmul(x, y, *c, *s, c, s);
         return;
     }
 }
@@ -1096,34 +1100,37 @@ int main(int argc, char* argv[])
                         
                         if(!pt)
                         {
-                            const double uu = ui*uj;
-                            const double uv = ui*vj;
-                            const double vu = vi*uj;
-                            const double vv = vi*vj;
-                            
-                            const double xij = cyi*syj - syi*cyj*cdx;
-                            const double yij = cyj*sdx;
-                            const double xji = cyj*syi - syj*cyi*cdx;
-                            const double yji = -cyi*sdx;
-                            
                             double sij, cij, sji, cji;
-                            nsincos(Si, xij, yij, &sij, &cij);
-                            nsincos(Sj, xji, yji, &sji, &cji);
+                            double ai, bi, aj, bj;
+                            double xip_re, xip_im, xim_re, xim_im;
                             
-                            const double cp = cij*cji + sij*sji;
-                            const double sp = sij*cji - cij*sji;
-                            const double cm = cij*cji - sij*sji;
-                            const double sm = sij*cji + cij*sji;
+                            const double w = ww/W_[n];
                             
-                            const double xip_re = (uu + vv)*cp - (uv - vu)*sp;
-                            const double xip_im = (uv - vu)*cp + (uu + vv)*sp;
-                            const double xim_re = (uu - vv)*cm - (uv + vu)*sm;
-                            const double xim_im = (uv + vu)*cm + (uu - vv)*sm;
+                            // e^{I phi_ij} unnormalised
+                            cij = cyi*syj - syi*cyj*cdx;
+                            sij = -cyj*sdx;
+                             // cij + I sij = e^{I Si phi_ij}
+                            nsincos(Si, cij, sij, &sij, &cij);
+                            // ai + I bi = (ui + I vi) e^{-I Si phi_i}
+                            cmul(ui, vi, cij, -sij, &ai, &bi);
                             
-                            X_[0*nd+n] += (ww/W_[n])*(xip_re - X_[0*nd+n]);
-                            X_[1*nd+n] += (ww/W_[n])*(xim_re - X_[1*nd+n]);
-                            X_[2*nd+n] += (ww/W_[n])*(xip_im - X_[2*nd+n]);
-                            X_[3*nd+n] += (ww/W_[n])*(xim_im - X_[3*nd+n]);
+                            // e^{I phi_ji} unnormalised
+                            cji = cyj*syi - syj*cyi*cdx;
+                            sji = cyi*sdx;
+                            // cji + I cji = e^{I Sj phi_ji}
+                            nsincos(Sj, cji, sji, &sji, &cji);
+                            // aj + I bj = (uj + I vj) e^{-I Sj phi_ji}
+                            cmul(uj, vj, cji, -sji, &aj, &bj);
+                            
+                            // xip_re + I xip_im = (ai + I bi) (aj - I bj)
+                            cmul(ai, bi, aj, -bj, &xip_re, &xip_im);
+                            // xim_re + I xim_im = (ai + I bi) (aj + I bj)
+                            cmul(ai, bi, aj, bj, &xim_re, &xim_im);
+                            
+                            X_[0*nd+n] += w*(xip_re - X_[0*nd+n]);
+                            X_[1*nd+n] += w*(xim_re - X_[1*nd+n]);
+                            X_[2*nd+n] += w*(xip_im - X_[2*nd+n]);
+                            X_[3*nd+n] += w*(xim_im - X_[3*nd+n]);
                         }
                         
                         nn_ += 1;
