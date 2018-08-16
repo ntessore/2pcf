@@ -24,7 +24,7 @@
 
 enum { MODE_NONE, MODE_POINTS, MODE_FIELD };
 enum { SPACING_LIN, SPACING_LOG };
-enum { COORDS_FLAT, COORDS_RADEC };
+enum { COORDS_FLAT, COORDS_LONLAT };
 enum { FIELD_REAL, FIELD_COMPLEX };
 
 enum {
@@ -48,6 +48,11 @@ const char* UNAME[NUM_UNITS] = {
     "deg",
     "arcmin",
     "arcsec"
+};
+
+const char* CNAME[] = {
+    "flat",
+    "lon, lat"
 };
 
 static const double PI_HALF = 1.5707963267948966192;
@@ -352,7 +357,7 @@ int main(int argc, char* argv[])
         double gridy;
     } cfg;
     
-    bool pt, xc, ls, rd, tc;
+    bool pt, xc, ls, sc, tc;
     size_t nd;
     double dl, dh, sdh;
     double* db;
@@ -437,8 +442,8 @@ int main(int argc, char* argv[])
         {
             if(strcmp(val, "flat") == 0)
                 cfg.coords = COORDS_FLAT;
-            else if(strcmp(val, "radec") == 0)
-                cfg.coords = COORDS_RADEC;
+            else if(strcmp(val, "lonlat") == 0)
+                cfg.coords = COORDS_LONLAT;
             else
                 goto err_cfg_bad_value;
         }
@@ -547,7 +552,7 @@ int main(int argc, char* argv[])
     
     pt = cfg.mode == MODE_POINTS;
     xc = !!strlen(cfg.catalog2);
-    rd = cfg.coords == COORDS_RADEC;
+    sc = cfg.coords != COORDS_FLAT;
     ls = cfg.spacing == SPACING_LOG;
     
     if(pt && !xc)
@@ -578,7 +583,7 @@ int main(int argc, char* argv[])
             db[i] = exp(log(dl) + i*(log(dh) - log(dl))/nd);
         else
             db[i] = dl + i*(dh - dl)/nd;
-        if(rd)
+        if(sc)
             db[i] = 2*sin(0.5*db[i]);
         db[i] = db[i]*db[i];
     }
@@ -609,7 +614,7 @@ int main(int argc, char* argv[])
         printf("catalog 2 ....... %s\n", cfg.catalog2);
     }
     printf("data units ...... %s\n", UNAME[cfg.dunit]);
-    printf("coordinates ..... %s\n", rd ? "spherical" : "flat");
+    printf("coordinates ..... %s\n", CNAME[cfg.coords]);
     if(!pt)
     {
         if(!xc)
@@ -638,7 +643,7 @@ int main(int argc, char* argv[])
                                     cfg.thmin, cfg.thmax, UNAME[cfg.thunit]);
     printf("bin spacing ..... %s\n", ls ? "logarithmic" : "linear");
     printf("\n");
-    if(rd)
+    if(sc)
     {
         printf("grid size ....... %g x %g deg^2\n", cfg.gridx, cfg.gridy);
         printf("\n");
@@ -678,7 +683,7 @@ int main(int argc, char* argv[])
     
     printf("building index\n");
     
-    if(rd)
+    if(sc)
     {
         xl = 0;
         xh = TWO_PI;
@@ -730,7 +735,7 @@ int main(int argc, char* argv[])
         abort();
     }
     
-    if(rd)
+    if(sc)
     {
         for(i = 0; i < gh; ++i)
         {
@@ -793,7 +798,7 @@ int main(int argc, char* argv[])
     printf("> done with %zu x %zu grid cells\n", gw, gh);
     printf("\n");
     
-    if(rd)
+    if(sc)
     {
         for(i = 0; i < n1; ++i)
         {
@@ -875,7 +880,7 @@ int main(int argc, char* argv[])
         nn = 0;
         
         #pragma omp parallel default(none) shared(st, dt, nn, W, X, qQ) \
-            private(i, j) firstprivate(pt, xc, rd, tc, nd, db, ng, gw, gh, \
+            private(i, j) firstprivate(pt, xc, sc, tc, nd, db, ng, gw, gh, \
                 dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, stdout)
         {
             size_t qi;
@@ -997,7 +1002,7 @@ int main(int argc, char* argv[])
                         const double wj  = cj_[j*DW+6];
                         
                         const double sdx = cxi*sxj - sxi*cxj;
-                        const double cdx = cxi*cxj + rd*sxi*sxj;
+                        const double cdx = cxi*cxj + sc*sxi*sxj;
                         
                         const double d1 = cdx*cyi - cyj;
                         const double d2 = sdx*cyi;
