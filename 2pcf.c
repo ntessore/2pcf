@@ -26,6 +26,7 @@ enum { MODE_NONE, MODE_POINTS, MODE_FIELD };
 enum { SPACING_LIN, SPACING_LOG };
 enum { COORDS_FLAT, COORDS_LONLAT };
 enum { FIELD_REAL, FIELD_COMPLEX };
+enum { SIGNS_PP, SIGNS_PM, SIGNS_MP, SIGNS_MM };
 
 enum {
     UNIT_RAD,
@@ -101,7 +102,7 @@ static inline void nsincos(int n, double x, double y, double* s, double* c)
 
 static const int DW = 8;
 
-double* readc(const char* f, double ui, bool pt, bool cf, size_t* n)
+double* readc(const char* f, double ui, bool pt, bool cf, int sg, size_t* n)
 {
     FILE* fp;
     int l;
@@ -190,8 +191,8 @@ double* readc(const char* f, double ui, bool pt, bool cf, size_t* n)
         d[i*DW+1] = y;
         d[i*DW+2] = 1;
         d[i*DW+3] = 1;
-        d[i*DW+4] = u;
-        d[i*DW+5] = v;
+        d[i*DW+4] = sg&2 ? -u : u;
+        d[i*DW+5] = sg&1 ? -v : v;
         d[i*DW+6] = w;
         
         i += 1;
@@ -347,6 +348,8 @@ int main(int argc, char* argv[])
         int field2;
         int spin1;
         int spin2;
+        int signs1;
+        int signs2;
         char output[LINELEN];
         int nth;
         double thmin;
@@ -492,6 +495,57 @@ int main(int argc, char* argv[])
             if(cfg.spin2 < 1)
                 goto err_cfg_bad_value;
         }
+        else if(strcmp(key, "signs") == 0)
+        {
+            if(strcmp(val, "+") == 0)
+                cfg.signs1 = cfg.signs2 = SIGNS_PP;
+            else if(strcmp(val, "-") == 0)
+                cfg.signs1 = cfg.signs2 = SIGNS_MM;
+            else if(strcmp(val, "++") == 0)
+                cfg.signs1 = cfg.signs2 = SIGNS_PP;
+            else if(strcmp(val, "+-") == 0)
+                cfg.signs1 = cfg.signs2 = SIGNS_PM;
+            else if(strcmp(val, "-+") == 0)
+                cfg.signs1 = cfg.signs2 = SIGNS_MP;
+            else if(strcmp(val, "--") == 0)
+                cfg.signs1 = cfg.signs2 = SIGNS_MM;
+            else
+                goto err_cfg_bad_value;
+        }
+        else if(strcmp(key, "signs1") == 0)
+        {
+            if(strcmp(val, "+") == 0)
+                cfg.signs1 = SIGNS_PP;
+            else if(strcmp(val, "-") == 0)
+                cfg.signs1 = SIGNS_MM;
+            else if(strcmp(val, "++") == 0)
+                cfg.signs1 = SIGNS_PP;
+            else if(strcmp(val, "+-") == 0)
+                cfg.signs1 = SIGNS_PM;
+            else if(strcmp(val, "-+") == 0)
+                cfg.signs1 = SIGNS_MP;
+            else if(strcmp(val, "--") == 0)
+                cfg.signs1 = SIGNS_MM;
+            else
+                goto err_cfg_bad_value;
+        }
+        else if(strcmp(key, "signs2") == 0)
+        {
+            if(strcmp(val, "+") == 0)
+                cfg.signs2 = SIGNS_PP;
+            else if(strcmp(val, "-") == 0)
+                cfg.signs2 = SIGNS_MM;
+            else if(strcmp(val, "++") == 0)
+                cfg.signs2 = SIGNS_PP;
+            else if(strcmp(val, "+-") == 0)
+                cfg.signs2 = SIGNS_PM;
+            else if(strcmp(val, "-+") == 0)
+                cfg.signs2 = SIGNS_MP;
+            else if(strcmp(val, "--") == 0)
+                cfg.signs2 = SIGNS_MM;
+            else
+                goto err_cfg_bad_value;
+        }
         else if(strcmp(key, "output") == 0)
             strncpy(cfg.output, val, sizeof cfg.output);
         else if(strcmp(key, "nth") == 0)
@@ -620,20 +674,41 @@ int main(int argc, char* argv[])
         if(!xc)
         {
             if(cfg.field1)
+            {
                 printf("field type ...... complex spin-%d\n", S1);
+                printf("signature ....... %su %s i v\n",
+                        cfg.signs1&2 ? "-" : "", cfg.signs1&1 ? "-" : "+");
+            }
             else
+            {
                 printf("field type ...... real\n");
+                printf("signature ....... %su\n", cfg.signs1&2 ? "-" : "+");
+            }
         }
         else
         {
             if(cfg.field1)
+            {
                 printf("field 1 type .... complex spin-%d\n", S1);
+                printf("signature 1 ..... %su %s i v\n",
+                        cfg.signs1&2 ? "-" : "", cfg.signs1&1 ? "-" : "+");
+            }
             else
+            {
                 printf("field 1 type .... real\n");
+                printf("signature 1 ..... %su\n", cfg.signs1&2 ? "-" : "+");
+            }
             if(cfg.field2)
+            {
                 printf("field 2 type .... complex spin-%d\n", S2);
+                printf("signature 2 ..... %su %s i v\n",
+                        cfg.signs2&2 ? "-" : "", cfg.signs2&1 ? "-" : "+");
+            }
             else
+            {
                 printf("field 2 type .... real\n");
+                printf("signature 2 ...... %su\n", cfg.signs2&2 ? "-" : "+");
+            }
         }
     }
     printf("\n");
@@ -651,7 +726,7 @@ int main(int argc, char* argv[])
     
     printf("reading %s\n", pt ? "data catalog" : xc ? "catalog 1" : "catalog");
     
-    c1 = readc(cfg.catalog1, ui, pt, cfg.field1, &n1);
+    c1 = readc(cfg.catalog1, ui, pt, cfg.field1, cfg.signs1, &n1);
     if(!c1)
     {
         fprintf(stderr, "error: could not read %s\n", cfg.catalog1);
@@ -665,7 +740,7 @@ int main(int argc, char* argv[])
     {
         printf("reading %s\n", pt ? "random catalog" : "catalog 2");
         
-        c2 = readc(cfg.catalog2, ui, pt, cfg.field2, &n2);
+        c2 = readc(cfg.catalog2, ui, pt, cfg.field2, cfg.signs2, &n2);
         if(!c2)
         {
             fprintf(stderr, "error: could not read %s\n", cfg.catalog2);
