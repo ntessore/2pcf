@@ -293,15 +293,15 @@ int main(int argc, char* argv[])
     
     printf("building index\n");
     
+    gx = cfg.gridx*uo;
+    gy = cfg.gridy*uo;
+    
     if(sc)
     {
         xl = 0;
         xh = TWO_PI;
         yl = -PI_HALF;
         yh = +PI_HALF;
-        
-        gx = cfg.gridx*UCONV[UNIT_DEG];
-        gy = cfg.gridy*UCONV[UNIT_DEG];
         
         gw = (int)(fmax(1, floor((xh - xl)/gx))) | 1;
         gh = fmax(1, floor((yh - yl)/gy));
@@ -330,9 +330,6 @@ int main(int argc, char* argv[])
         
         gw = floor((xh - xl)/dh) + 1;
         gh = floor((yh - yl)/dh) + 1;
-        
-        gx = dh;
-        gy = dh;
     }
     
     ng = gw*gh;

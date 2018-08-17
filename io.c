@@ -160,18 +160,21 @@ void readcfg(const char* f, struct config* cfg)
             cfg->spin1 = cfg->spin2 = atoi(val);
             if(cfg->spin1 < 0)
                 goto err_bad_value;
+            cfg->field1 = cfg->field2 = FIELD_COMPLEX;
         }
         else if(strcmp(key, "spin1") == 0)
         {
             cfg->spin1 = atoi(val);
             if(cfg->spin1 < 0)
                 goto err_bad_value;
+            cfg->field1 = FIELD_COMPLEX;
         }
         else if(strcmp(key, "spin2") == 0)
         {
             cfg->spin2 = atoi(val);
             if(cfg->spin2 < 0)
                 goto err_bad_value;
+            cfg->field2 = FIELD_COMPLEX;
         }
         else if(strcmp(key, "signs") == 0)
         {
@@ -249,10 +252,14 @@ void readcfg(const char* f, struct config* cfg)
         else if(strcmp(key, "gridx") == 0)
         {
             cfg->gridx = atof(val);
+            if(cfg->gridx <= 0)
+                goto err_bad_value;
         }
         else if(strcmp(key, "gridy") == 0)
         {
             cfg->gridy = atof(val);
+            if(cfg->gridy <= 0)
+                goto err_bad_value;
         }
         else if(strcmp(key, "num_threads") == 0)
         {
@@ -285,15 +292,20 @@ void readcfg(const char* f, struct config* cfg)
     if(!cfg->thmax)
         { key = "thmax"; goto err_missing_key; }
     
-    if(cfg->gridx <= 0)
-        cfg->gridx = 0.1;
-    if(cfg->gridy <= 0)
-        cfg->gridy = 0.1;
-    
-    if(cfg->spin1)
-        cfg->field1 = FIELD_COMPLEX;
-    if(cfg->spin2)
-        cfg->field2 = FIELD_COMPLEX;
+    if(!cfg->gridx)
+    {
+        if(cfg->coords == COORDS_FLAT)
+            cfg->gridx = cfg->thmax/2;
+        else
+            cfg->gridx = 0.1*UCONV[UNIT_DEG]/UCONV[cfg->thunit];
+    }
+    if(!cfg->gridy)
+    {
+        if(cfg->coords == COORDS_FLAT)
+            cfg->gridy = cfg->thmax/2;
+        else
+            cfg->gridy = 0.1*UCONV[UNIT_DEG]/UCONV[cfg->thunit];
+    }
     
     return;
     
@@ -394,11 +406,9 @@ void printcfg(const char* cfgfile, const struct config* cfg)
                                                     PRN_UNIT[cfg->thunit]);
     printf("bin spacing ..... %s\n", PRN_SPACING[cfg->spacing]);
     printf("\n");
-    if(cfg->coords != COORDS_FLAT)
-    {
-        printf("grid size ....... %g x %g deg^2\n", cfg->gridx, cfg->gridy);
-        printf("\n");
-    }
+    printf("grid size ....... %g x %g %s^2\n", cfg->gridx, cfg->gridy,
+                                                    PRN_UNIT[cfg->thunit]);
+    printf("\n");
     
 #ifdef _OPENMP
     printf("num. threads .... %d\n", omp_get_max_threads());
