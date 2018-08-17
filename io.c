@@ -20,6 +20,10 @@ enum { SIGNS_PP, SIGNS_PM, SIGNS_MP, SIGNS_MM, NUM_SIGNS };
 char* CFG_SIGNS[] = { "++", "+-", "-+", "--" };
 char* PRN_SIGNS[] = { "u + i v", "u - i v", "-u + i v", "-u - i v" };
 
+enum { TDATA_SHARE, TDATA_COPY, NUM_TDATA };
+char* CFG_TDATA[] = { "share", "copy" };
+char* PRN_TDATA[] = { "share", "copy" };
+
 enum { UNIT_RAD, UNIT_DEG, UNIT_ARCMIN, UNIT_ARCSEC, NUM_UNIT };
 char* CFG_UNIT[] = { "rad", "deg", "arcmin", "arcsec" };
 char* PRN_UNIT[] = { "radian", "degree", "arcmin", "arcsec" };
@@ -55,6 +59,8 @@ struct config {
     int spacing;
     double gridx;
     double gridy;
+    int num_threads;
+    int thread_data;
 };
 
 static int findstr(const char* s, int n, char* v[])
@@ -248,6 +254,18 @@ void readcfg(const char* f, struct config* cfg)
         {
             cfg->gridy = atof(val);
         }
+        else if(strcmp(key, "num_threads") == 0)
+        {
+            cfg->num_threads = atoi(val);
+            if(cfg->num_threads <= 0)
+                goto err_bad_value;
+        }
+        else if(strcmp(key, "thread_data") == 0)
+        {
+            cfg->thread_data = findstr(val, NUM_TDATA, CFG_TDATA);
+            if(cfg->thread_data == NUM_TDATA)
+                goto err_bad_value;
+        }
         else
             goto err_bad_key;
     }
@@ -381,6 +399,12 @@ void printcfg(const char* cfgfile, const struct config* cfg)
         printf("grid size ....... %g x %g deg^2\n", cfg->gridx, cfg->gridy);
         printf("\n");
     }
+    
+#ifdef _OPENMP
+    printf("num. threads .... %d\n", omp_get_max_threads());
+    printf("thread data ..... %s\n", PRN_TDATA[cfg->thread_data]);
+    printf("\n");
+#endif
 }
 
 double* readc(const char* f, double ui, bool pt, bool cf, int sg, size_t* n)

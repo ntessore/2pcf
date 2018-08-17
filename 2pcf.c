@@ -220,7 +220,6 @@ int main(int argc, char* argv[])
     
     cfgfile = argc > 1 ? argv[1] : "2pcf.cfg";
     readcfg(cfgfile, &cfg);
-    printcfg(cfgfile, &cfg);
     
     pt = cfg.mode == MODE_POINTS;
     xc = cfg.catalog2 != NULL;
@@ -228,7 +227,9 @@ int main(int argc, char* argv[])
     ls = cfg.spacing == SPACING_LOG;
     
 #ifdef _OPENMP
-    tc = true;
+    if(cfg.num_threads)
+        omp_set_num_threads(cfg.num_threads);
+    tc = cfg.thread_data == TDATA_COPY;
 #else
     tc = false;
 #endif
@@ -238,6 +239,8 @@ int main(int argc, char* argv[])
         fprintf(stderr, "error: point mode requires `catalog2`\n");
         return EXIT_FAILURE;
     }
+    
+    printcfg(cfgfile, &cfg);
     
     ui = UCONV[cfg.dunit];
     uo = UCONV[cfg.thunit];
@@ -539,6 +542,11 @@ int main(int argc, char* argv[])
             
             #pragma omp master
             {
+#ifdef _OPENMP
+                printf("> using %d thread(s) ", omp_get_num_threads());
+                fflush(stdout);
+#endif
+                
                 signal(SIGALRM, handler);
                 alarm(1);
             }
