@@ -487,7 +487,7 @@ int main(int argc, char* argv[])
             private(i, j) firstprivate(pt, xc, sc, tc, nd, db, ng, gw, gh, \
                 dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, stdout)
         {
-            size_t qi;
+            size_t qc;
             int q, nq;
             int* qr;
             
@@ -543,7 +543,7 @@ int main(int argc, char* argv[])
                 alarm(1);
             }
             
-            qi = -1;
+            qc = -1;
             
             #pragma omp for schedule(static, 1) nowait
             for(i = 0; i < ni; ++i)
@@ -570,10 +570,11 @@ int main(int argc, char* argv[])
                 const double ui  = ci_[i*DW+4];
                 const double vi  = ci_[i*DW+5];
                 const double wi  = ci_[i*DW+6];
+                const size_t qi  = ci_[i*DW+7];
                 
-                if(ci_[i*DW+7] != qi)
+                if(qi != qc)
                 {
-                    qi = ci_[i*DW+7];
+                    qc = qi;
                     query(qi, gw, gh, dy, dx, &nq, qr);
                     for(q = 0; q < 2*nq; ++q)
                         qr[q] = mj_[qr[q]];
@@ -606,49 +607,49 @@ int main(int argc, char* argv[])
                         
                         const double d = d1*d1 + d2*d2 + d3*d3;
                         
-                        if(d < db_[0] || d >= db_[nd])
-                            continue;
-                        
-                        const size_t n = upper_bound(d, db+1, nd-1);
-                        
-                        const double ww = wi*wj;
-                        
-                        N_[n] += 1;
-                        W_[n] += ww;
-                        
-                        if(!pt)
+                        if(d >= db_[0] && d < db_[nd])
                         {
-                            double sij, cij, sji, cji;
-                            double ai, bi, aj, bj;
-                            double xip_re, xip_im, xim_re, xim_im;
+                            const size_t n = upper_bound(d, db+1, nd-1);
                             
-                            const double w = ww/W_[n];
+                            const double ww = wi*wj;
                             
-                            // e^{I phi_ij} unnormalised
-                            cij = cyi*syj - syi*cyj*cdx;
-                            sij = -cyj*sdx;
-                            // cij + I sij = e^{I Si phi_ij}
-                            nsincos(Si, cij, sij, &sij, &cij);
-                            // ai + I bi = (ui + I vi) e^{-I Si phi_i}
-                            cmul(ui, vi, cij, -sij, &ai, &bi);
+                            N_[n] += 1;
+                            W_[n] += ww;
                             
-                            // e^{I phi_ji} unnormalised
-                            cji = cyj*syi - syj*cyi*cdx;
-                            sji = cyi*sdx;
-                            // cji + I cji = e^{I Sj phi_ji}
-                            nsincos(Sj, cji, sji, &sji, &cji);
-                            // aj + I bj = (uj + I vj) e^{-I Sj phi_ji}
-                            cmul(uj, vj, cji, -sji, &aj, &bj);
-                            
-                            // xip_re + I xip_im = (ai + I bi) (aj - I bj)
-                            cmul(ai, bi, aj, -bj, &xip_re, &xip_im);
-                            // xim_re + I xim_im = (ai + I bi) (aj + I bj)
-                            cmul(ai, bi, aj, bj, &xim_re, &xim_im);
-                            
-                            X_[0*nd+n] += w*(xip_re - X_[0*nd+n]);
-                            X_[1*nd+n] += w*(xim_re - X_[1*nd+n]);
-                            X_[2*nd+n] += w*(xip_im - X_[2*nd+n]);
-                            X_[3*nd+n] += w*(xim_im - X_[3*nd+n]);
+                            if(!pt)
+                            {
+                                double sij, cij, sji, cji;
+                                double ai, bi, aj, bj;
+                                double xip_re, xip_im, xim_re, xim_im;
+                                
+                                const double wn = ww/W_[n];
+                                
+                                // e^{I phi_ij} unnormalised
+                                cij = cyi*syj - syi*cyj*cdx;
+                                sij = -cyj*sdx;
+                                // cij + I sij = e^{I Si phi_ij}
+                                nsincos(Si, cij, sij, &sij, &cij);
+                                // ai + I bi = (ui + I vi) e^{-I Si phi_i}
+                                cmul(ui, vi, cij, -sij, &ai, &bi);
+                                
+                                // e^{I phi_ji} unnormalised
+                                cji = cyj*syi - syj*cyi*cdx;
+                                sji = cyi*sdx;
+                                // cji + I cji = e^{I Sj phi_ji}
+                                nsincos(Sj, cji, sji, &sji, &cji);
+                                // aj + I bj = (uj + I vj) e^{-I Sj phi_ji}
+                                cmul(uj, vj, cji, -sji, &aj, &bj);
+                                
+                                // xip = (ai + I bi) (aj - I bj)
+                                cmul(ai, bi, aj, -bj, &xip_re, &xip_im);
+                                // xim = (ai + I bi) (aj + I bj)
+                                cmul(ai, bi, aj, bj, &xim_re, &xim_im);
+                                
+                                X_[0*nd+n] += wn*(xip_re - X_[0*nd+n]);
+                                X_[1*nd+n] += wn*(xim_re - X_[1*nd+n]);
+                                X_[2*nd+n] += wn*(xip_im - X_[2*nd+n]);
+                                X_[3*nd+n] += wn*(xim_im - X_[3*nd+n]);
+                            }
                         }
                     }
                 }
