@@ -483,7 +483,7 @@ int main(int argc, char* argv[])
         dt = 0;
         fb = 0;
         
-        #pragma omp parallel default(none) shared(st, dt, nn, W, X, qQ) \
+        #pragma omp parallel default(none) shared(st, dt, nn, N, W, X, qQ) \
             private(i, j) firstprivate(pt, xc, sc, tc, nd, db, ng, gw, gh, \
                 dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, stdout)
         {
