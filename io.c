@@ -417,7 +417,7 @@ void printcfg(const char* cfgfile, const struct config* cfg)
 #endif
 }
 
-double* readc(const char* f, double ui, bool pt, bool cf, int sg, size_t* n)
+double* readc(const char* f, double ui, bool fm, bool cf, int sg, size_t* n)
 {
     FILE* fp;
     int l;
@@ -446,8 +446,8 @@ double* readc(const char* f, double ui, bool pt, bool cf, int sg, size_t* n)
     {
         sx = strtok(buf, " \t\r\n");
         sy = strtok(NULL, " \t\r\n");
-        su = !pt ? strtok(NULL, " \t\r\n") : NULL;
-        sv = !pt && cf ? strtok(NULL, " \t\r\n") : NULL;
+        su = fm ? strtok(NULL, " \t\r\n") : NULL;
+        sv = fm && cf ? strtok(NULL, " \t\r\n") : NULL;
         sw = strtok(NULL, " \t\r\n");
         
         if(!sx || *sx == '#')
@@ -462,7 +462,7 @@ double* readc(const char* f, double ui, bool pt, bool cf, int sg, size_t* n)
         x = atof(sx)*ui;
         y = atof(sy)*ui;
         
-        if(!pt)
+        if(fm)
         {
             if(!su || *su == '#')
             {

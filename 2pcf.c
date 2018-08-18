@@ -179,7 +179,7 @@ int main(int argc, char* argv[])
     const char* cfgfile;
     struct config cfg;
     
-    bool pt, xc, ls, th, sc, tc;
+    bool fm, xc, ls, th, sc, tc;
     size_t nd;
     double dl, dh, sdh;
     double* db;
@@ -222,7 +222,7 @@ int main(int argc, char* argv[])
     cfgfile = argc > 1 ? argv[1] : "2pcf.cfg";
     readcfg(cfgfile, &cfg);
     
-    pt = cfg.mode == MODE_POINTS;
+    fm = cfg.mode == MODE_FIELD;
     xc = cfg.catalog2 != NULL;
     sc = cfg.coords != COORDS_FLAT;
     ls = cfg.spacing == SPACING_LOG;
@@ -236,7 +236,7 @@ int main(int argc, char* argv[])
     tc = false;
 #endif
     
-    if(pt && !xc)
+    if(!fm && !xc)
     {
         fprintf(stderr, "error: point mode requires `catalog2`\n");
         return EXIT_FAILURE;
@@ -271,18 +271,18 @@ int main(int argc, char* argv[])
     S1 = cfg.spin1;
     S2 = cfg.spin2;
     
-    printf("reading %s\n", pt ? "data catalog" : xc ? "catalog 1" : "catalog");
+    printf("reading %s\n", fm ? xc ? "catalog 1" : "catalog" : "data catalog");
     
-    c1 = readc(cfg.catalog1, ui, pt, cfg.field1, cfg.signs1, &n1);
+    c1 = readc(cfg.catalog1, ui, fm, cfg.field1, cfg.signs1, &n1);
     
     printf("> done with %zu points\n", n1);
     printf("\n");
     
     if(xc)
     {
-        printf("reading %s\n", pt ? "random catalog" : "catalog 2");
+        printf("reading %s\n", fm ? "catalog 2" : "random catalog");
         
-        c2 = readc(cfg.catalog2, ui, pt, cfg.field2, cfg.signs2, &n2);
+        c2 = readc(cfg.catalog2, ui, fm, cfg.field2, cfg.signs2, &n2);
         
         printf("> done with %zu points\n", n2);
         printf("\n");
@@ -412,22 +412,22 @@ int main(int argc, char* argv[])
         }
     }
     
-    if(pt)
-    {
-        np = 3;
-        N = calloc(nd*np, sizeof(double));
-        W = calloc(nd*np, sizeof(double));
-        X = NULL;
-        if(!N || !W)
-            goto err_alloc;
-    }
-    else
+    if(fm)
     {
         np = 1;
         N = calloc(nd, sizeof(double));
         W = calloc(nd, sizeof(double));
         X = calloc(nd*4, sizeof(double));
         if(!N || !W || !X)
+            goto err_alloc;
+    }
+    else
+    {
+        np = 3;
+        N = calloc(nd*np, sizeof(double));
+        W = calloc(nd*np, sizeof(double));
+        X = NULL;
+        if(!N || !W)
             goto err_alloc;
     }
     
@@ -445,7 +445,17 @@ int main(int argc, char* argv[])
     
     for(p = 0; p < np && !qQ; ++p)
     {
-        if(pt)
+        if(fm)
+        {
+            printf("calculating correlations\n");
+            
+            ci = c1, ni = n1, Si = S1;
+            if(xc)
+                cj = c2, nj = n2, mj = m2, Sj = S2;
+            else
+                cj = c1, nj = n1, mj = m1, Sj = S1;
+        }
+        else
         {
             Si = Sj = 0;
             
@@ -482,23 +492,13 @@ int main(int argc, char* argv[])
                 break;
             }
         }
-        else
-        {
-            printf("calculating correlations\n");
-            
-            ci = c1, ni = n1, Si = S1;
-            if(xc)
-                cj = c2, nj = n2, mj = m2, Sj = S2;
-            else
-                cj = c1, nj = n1, mj = m1, Sj = S1;
-        }
         
         st = time(NULL);
         dt = 0;
         fb = 0;
         
         #pragma omp parallel default(none) shared(st, dt, N, W, T, X, qQ) \
-            private(i, j) firstprivate(pt, xc, ls, sc, th, tc, nd, db, ng, \
+            private(i, j) firstprivate(fm, xc, ls, sc, th, tc, nd, db, ng, \
                 gw, gh, dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, stdout)
         {
             size_t qc;
@@ -549,8 +549,8 @@ int main(int argc, char* argv[])
             N_ = calloc(nd, sizeof(double));
             W_ = calloc(nd, sizeof(double));
             T_ = th ? calloc(nd*2, sizeof(double)) : NULL;
-            X_ = X ? calloc(nd*4, sizeof(double)) : NULL;
-            if(!N_ || !W_ || (th && !T) || (X && !X_))
+            X_ = fm ? calloc(nd*4, sizeof(double)) : NULL;
+            if(!N_ || !W_ || (th && !T) || (fm && !X_))
                 perror(NULL), abort();
             
             #pragma omp master
@@ -650,7 +650,7 @@ int main(int argc, char* argv[])
                                 T_[1*nd+n] += wn*(lth - T_[1*nd+n]);
                             }
                             
-                            if(!pt)
+                            if(fm)
                             {
                                 double sij, cij, sji, cji;
                                 double ai, bi, aj, bj;
@@ -709,7 +709,7 @@ int main(int argc, char* argv[])
                         T[1*nd+i] += w*(T_[1*nd+i] - T[1*nd+i]);
                     }
                     
-                    if(X)
+                    if(fm)
                     {
                         const double w = W_[i] > 0 ? W_[i]/W[p*nd+i] : 0;
                         
@@ -748,7 +748,7 @@ int main(int argc, char* argv[])
         printf("\n");
     }
     
-    if(pt)
+    if(!fm)
     {
         const size_t ndd = n1*(n1-1)/2;
         const size_t ndr = n1*n2;
