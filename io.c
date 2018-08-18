@@ -536,82 +536,91 @@ err_alloc:
 }
 
 void writexi(const char* f, size_t n, double a, double b, bool ls,
-                        double uo, bool pt, double* N, double* W, double* X)
+                    double uo, double* N, double* W, double* T, double* X)
 {
     FILE* fp;
     size_t i;
+    
+    double th, mth, mlth, np;
     
     fp = fopen(f, "w");
     if(!fp)
         goto err_fopen;
     
-    if(pt)
+    fprintf(fp, "# %-24s", "th");
+    if(T)
     {
-        fprintf(fp, "# %-24s", "theta");
-        fprintf(fp, "  %-24s", "xi");
-        fprintf(fp, "  %-24s", "DD");
-        fprintf(fp, "  %-24s", "DR");
-        fprintf(fp, "  %-24s", "RR");
-        fprintf(fp, "  %-24s", "npairs");
-        fprintf(fp, "\n");
+        fprintf(fp, "  %-24s", "<th>");
+        fprintf(fp, "  %-24s", "<log th>");
     }
-    else
+    if(X)
     {
-        fprintf(fp, "# %-24s", "theta");
         fprintf(fp, "  %-24s", "xip");
         fprintf(fp, "  %-24s", "xim");
         fprintf(fp, "  %-24s", "xip_im");
         fprintf(fp, "  %-24s", "xim_im");
-        fprintf(fp, "  %-24s", "weight");
-        fprintf(fp, "  %-24s", "npairs");
-        fprintf(fp, "\n");
+        fprintf(fp, "  %-24s", "wht");
     }
+    else
+    {
+        fprintf(fp, "  %-24s", "xi");
+        fprintf(fp, "  %-24s", "DD");
+        fprintf(fp, "  %-24s", "DR");
+        fprintf(fp, "  %-24s", "RR");
+    }
+    fprintf(fp, "  %-24s", "np");
+    fprintf(fp, "\n");
     
     for(i = 0; i < n; ++i)
     {
-        double d;
+        np = N[i];
         
         if(ls)
-            d = exp(log(a) + (i + 0.5)*(log(b) - log(a))/n);
+            th = exp(log(a) + (i + 0.5)*(log(b) - log(a))/n);
         else
-            d = a + (i + 0.5)*(b - a)/n;
+            th = a + (i + 0.5)*(b - a)/n;
+        th /= uo;
         
-        d /= uo;
+        fprintf(fp, " % .18e", th);
         
-        if(pt)
+        if(T)
         {
-            double np = N[i];
+            mth = T[0*n+i]/uo;
+            mlth = T[1*n+i] - log(uo);
+            
+            fprintf(fp, " % .18e", mth);
+            fprintf(fp, " % .18e", mlth);
+        }
+        
+        if(X)
+        {
+            double xip_re = X[0*n+i];
+            double xim_re = X[1*n+i];
+            double xip_im = X[2*n+i];
+            double xim_im = X[3*n+i];
+            double wht = W[i];
+            
+            fprintf(fp, " % .18e", xip_re);
+            fprintf(fp, " % .18e", xim_re);
+            fprintf(fp, " % .18e", xip_im);
+            fprintf(fp, " % .18e", xim_im);
+            fprintf(fp, " % .18e", wht);
+        }
+        else
+        {
             double dd = W[0*n+i];
             double dr = W[1*n+i];
             double rr = W[2*n+i];
             double xi = (dd - 2*dr + rr)/rr;
             
-            fprintf(fp, " % .18e", d);
             fprintf(fp, " % .18e", xi);
             fprintf(fp, " % .18e", dd);
             fprintf(fp, " % .18e", dr);
             fprintf(fp, " % .18e", rr);
-            fprintf(fp, " % .18e", np);
-            fprintf(fp, "\n");
         }
-        else
-        {
-            double npairs = N[i];
-            double weight = W[i];
-            double xip_re = X[0*n+i];
-            double xim_re = X[1*n+i];
-            double xip_im = X[2*n+i];
-            double xim_im = X[3*n+i];
-            
-            fprintf(fp, " % .18e", d);
-            fprintf(fp, " % .18e", xip_re);
-            fprintf(fp, " % .18e", xim_re);
-            fprintf(fp, " % .18e", xip_im);
-            fprintf(fp, " % .18e", xim_im);
-            fprintf(fp, " % .18e", weight);
-            fprintf(fp, " % .18e", npairs);
-            fprintf(fp, "\n");
-        }
+        
+        fprintf(fp, " % .18e", np);
+        fprintf(fp, "\n");
     }
     
     fclose(fp);

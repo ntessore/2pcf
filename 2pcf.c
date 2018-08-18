@@ -179,7 +179,7 @@ int main(int argc, char* argv[])
     const char* cfgfile;
     struct config cfg;
     
-    bool pt, xc, ls, sc, tc;
+    bool pt, xc, ls, th, sc, tc;
     size_t nd;
     double dl, dh, sdh;
     double* db;
@@ -201,6 +201,7 @@ int main(int argc, char* argv[])
     
     double* N;
     double* W;
+    double* T;
     double* X;
     
     int p, np;
@@ -225,6 +226,7 @@ int main(int argc, char* argv[])
     xc = cfg.catalog2 != NULL;
     sc = cfg.coords != COORDS_FLAT;
     ls = cfg.spacing == SPACING_LOG;
+    th = false;
     
 #ifdef _OPENMP
     if(cfg.num_threads)
@@ -429,6 +431,15 @@ int main(int argc, char* argv[])
             goto err_alloc;
     }
     
+    if(th)
+    {
+        T = calloc(nd*2, sizeof(double));
+        if(!T)
+            goto err_alloc;
+    }
+    else
+        T = NULL;
+    
     signal(SIGQUIT, handler);
     qQ = 0;
     
@@ -437,6 +448,9 @@ int main(int argc, char* argv[])
         if(pt)
         {
             Si = Sj = 0;
+            
+            if(p > 0)
+                th = false;
             
             switch(p)
             {
@@ -483,9 +497,9 @@ int main(int argc, char* argv[])
         dt = 0;
         fb = 0;
         
-        #pragma omp parallel default(none) shared(st, dt, nn, N, W, X, qQ) \
-            private(i, j) firstprivate(pt, xc, sc, tc, nd, db, ng, gw, gh, \
-                dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, stdout)
+        #pragma omp parallel default(none) shared(st, dt, N, W, T, X, qQ) \
+            private(i, j) firstprivate(pt, xc, ls, sc, th, tc, nd, db, ng, \
+                gw, gh, dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, stdout)
         {
             size_t qc;
             int q, nq;
@@ -498,6 +512,7 @@ int main(int argc, char* argv[])
             
             double* N_;
             double* W_;
+            double* T_;
             double* X_;
             
             nq = 0;
@@ -533,8 +548,9 @@ int main(int argc, char* argv[])
             
             N_ = calloc(nd, sizeof(double));
             W_ = calloc(nd, sizeof(double));
+            T_ = th ? calloc(nd*2, sizeof(double)) : NULL;
             X_ = X ? calloc(nd*4, sizeof(double)) : NULL;
-            if(!N_ || !W_ || (X && !X_))
+            if(!N_ || !W_ || (th && !T) || (X && !X_))
                 perror(NULL), abort();
             
             #pragma omp master
@@ -614,12 +630,25 @@ int main(int argc, char* argv[])
                         
                         if(d >= db_[0] && d < db_[nd])
                         {
-                            const size_t n = upper_bound(d, db+1, nd-1);
+                            const size_t n = upper_bound(d, db_+1, nd-1);
                             
                             const double ww = wi*wj;
                             
                             N_[n] += 1;
                             W_[n] += ww;
+                            
+                            if(th)
+                            {
+                                double th, lth;
+                                
+                                const double wn = ww/W_[n];
+                                
+                                th = sc ? 2*asin(0.5*sqrt(d)) : sqrt(d);
+                                lth = log(th);
+                                
+                                T_[0*nd+n] += wn*(th - T_[0*nd+n]);
+                                T_[1*nd+n] += wn*(lth - T_[1*nd+n]);
+                            }
                             
                             if(!pt)
                             {
@@ -672,6 +701,14 @@ int main(int argc, char* argv[])
                     N[p*nd+i] += N_[i];
                     W[p*nd+i] += W_[i];
                     
+                    if(th)
+                    {
+                        const double w = W_[i] > 0 ? W_[i]/W[p*nd+i] : 0;
+                        
+                        T[0*nd+i] += w*(T_[0*nd+i] - T[0*nd+i]);
+                        T[1*nd+i] += w*(T_[1*nd+i] - T[1*nd+i]);
+                    }
+                    
                     if(X)
                     {
                         const double w = W_[i] > 0 ? W_[i]/W[p*nd+i] : 0;
@@ -687,6 +724,7 @@ int main(int argc, char* argv[])
             free(qr);
             free(N_);
             free(W_);
+            free(T_);
             free(X_);
             
             if(tc)
@@ -724,9 +762,11 @@ int main(int argc, char* argv[])
         }
     }
     
-    writexi(cfg.output, nd, dl, dh, ls, uo, pt, N, W, X);
+    writexi(cfg.output, nd, dl, dh, ls, uo, N, W, T, X);
     
+    free(N);
     free(W);
+    free(T);
     free(X);
     free(m1);
     free(m2);
