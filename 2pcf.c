@@ -330,8 +330,8 @@ int main(int argc, char* argv[])
             if(c2[i*DW+1] > yh) yh = c2[i*DW+1];
         }
         
-        gw = floor((xh - xl)/dh) + 1;
-        gh = floor((yh - yl)/dh) + 1;
+        gw = floor((xh - xl)/gx) + 1;
+        gh = floor((yh - yl)/gy) + 1;
     }
     
     ng = gw*gh;
