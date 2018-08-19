@@ -579,7 +579,6 @@ void writexi(const char* f, size_t n, double a, double b, bool ls,
             th = exp(log(a) + (i + 0.5)*(log(b) - log(a))/n);
         else
             th = a + (i + 0.5)*(b - a)/n;
-        th /= uo;
         
         fprintf(fp, " % .18e", th);
         

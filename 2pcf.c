@@ -762,7 +762,7 @@ int main(int argc, char* argv[])
         }
     }
     
-    writexi(cfg.output, nd, dl, dh, ls, uo, N, W, T, X);
+    writexi(cfg.output, cfg.nth, cfg.thmin, cfg.thmax, ls, uo, N, W, T, X);
     
     free(N);
     free(W);
@@ -773,6 +773,7 @@ int main(int argc, char* argv[])
     free(c1);
     free(c2);
     free(dx);
+    free(db);
     
     freecfg(&cfg);
     
