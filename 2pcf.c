@@ -30,6 +30,12 @@ static inline void cmul(double x, double y, double u, double v,
     *im = k1 + k3;
 }
 
+static inline void sincos(double x, double* s, double* c)
+{
+    *s = sin(x);
+    *c = cos(x);
+}
+
 static inline void nsincos(int n, double x, double y, double* s, double* c)
 {
     double h;
@@ -66,17 +72,6 @@ static inline void nsincos(int n, double x, double y, double* s, double* c)
 }
 
 static const int DW = 8;
-
-volatile sig_atomic_t fb;
-volatile sig_atomic_t qQ;
-
-#pragma omp threadprivate(fb)
-
-void handler(int s)
-{
-    fb = (s == SIGALRM);
-    qQ = (s == SIGQUIT);
-}
 
 int mapsort(const void* a, const void* b)
 {
@@ -173,6 +168,16 @@ static inline size_t upper_bound(double x, const double v[], size_t n)
 }
 
 #include "io.c" // yes, really
+
+volatile sig_atomic_t AL;
+volatile sig_atomic_t QQ;
+
+void handler(int s)
+{
+    AL = (s == SIGALRM);
+    QQ = (s == SIGQUIT);
+    signal(s, handler);
+}
 
 int main(int argc, char* argv[])
 {
@@ -272,6 +277,7 @@ int main(int argc, char* argv[])
     S2 = cfg.spin2;
     
     printf("reading %s\n", fm ? xc ? "catalog 1" : "catalog" : "data catalog");
+    fflush(stdout);
     
     c1 = readc(cfg.catalog1, ui, fm, cfg.field1, cfg.signs1, &n1);
     
@@ -281,6 +287,7 @@ int main(int argc, char* argv[])
     if(xc)
     {
         printf("reading %s\n", fm ? "catalog 2" : "random catalog");
+        fflush(stdout);
         
         c2 = readc(cfg.catalog2, ui, fm, cfg.field2, cfg.signs2, &n2);
         
@@ -294,6 +301,7 @@ int main(int argc, char* argv[])
     }
     
     printf("building index\n");
+    fflush(stdout);
     
     gx = cfg.gridx*uo;
     gy = cfg.gridy*uo;
@@ -402,13 +410,13 @@ int main(int argc, char* argv[])
     {
         for(i = 0; i < n1; ++i)
         {
-            __sincos(c1[i*DW+0], &c1[i*DW+0], &c1[i*DW+2]);
-            __sincos(c1[i*DW+1], &c1[i*DW+1], &c1[i*DW+3]);
+            sincos(c1[i*DW+0], &c1[i*DW+0], &c1[i*DW+2]);
+            sincos(c1[i*DW+1], &c1[i*DW+1], &c1[i*DW+3]);
         }
         for(i = 0; i < n2; ++i)
         {
-            __sincos(c2[i*DW+0], &c2[i*DW+0], &c2[i*DW+2]);
-            __sincos(c2[i*DW+1], &c2[i*DW+1], &c2[i*DW+3]);
+            sincos(c2[i*DW+0], &c2[i*DW+0], &c2[i*DW+2]);
+            sincos(c2[i*DW+1], &c2[i*DW+1], &c2[i*DW+3]);
         }
     }
     
@@ -440,14 +448,16 @@ int main(int argc, char* argv[])
     else
         T = NULL;
     
+    signal(SIGALRM, handler);
     signal(SIGQUIT, handler);
-    qQ = 0;
+    AL = QQ = 0;
     
-    for(p = 0; p < np && !qQ; ++p)
+    for(p = 0; p < np && !QQ; ++p)
     {
         if(fm)
         {
             printf("calculating correlations\n");
+            fflush(stdout);
             
             ci = c1, ni = n1, Si = S1;
             if(xc)
@@ -466,6 +476,7 @@ int main(int argc, char* argv[])
             {
             case 0:
                 printf("calculating DD correlations\n");
+                fflush(stdout);
                 
                 xc = false;
                 ci = c1, ni = n1;
@@ -475,6 +486,7 @@ int main(int argc, char* argv[])
                 
             case 1:
                 printf("calculating DR correlations\n");
+                fflush(stdout);
                 
                 xc = true;
                 ci = c1, ni = n1;
@@ -484,6 +496,7 @@ int main(int argc, char* argv[])
                 
             case 2:
                 printf("calculating RR correlations\n");
+                fflush(stdout);
                 
                 xc = false;
                 ci = c2, ni = n2;
@@ -495,9 +508,8 @@ int main(int argc, char* argv[])
         
         st = time(NULL);
         dt = 0;
-        fb = 0;
         
-        #pragma omp parallel default(none) shared(st, dt, N, W, T, X, qQ) \
+        #pragma omp parallel default(none) shared(st, dt, N, W, T, X, AL, QQ) \
             private(i, j) firstprivate(fm, xc, ls, sc, th, tc, nd, db, ng, \
                 gw, gh, dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, stdout)
         {
@@ -514,6 +526,8 @@ int main(int argc, char* argv[])
             double* W_;
             double* T_;
             double* X_;
+            
+            bool fb;
             
             nq = 0;
             qr = malloc((2*dy+1)*4*sizeof(int));
@@ -553,15 +567,19 @@ int main(int argc, char* argv[])
             if(!N_ || !W_ || (th && !T) || (fm && !X_))
                 perror(NULL), abort();
             
+            fb = false;
+            
             #pragma omp master
+            if(isatty(fileno(stdout)))
             {
+                fb = true;
+                AL = false;
+                alarm(1);
+                
 #ifdef _OPENMP
-                printf("> using %d thread(s) ", omp_get_num_threads());
+                printf("> %d thread(s)\r", omp_get_num_threads());
                 fflush(stdout);
 #endif
-                
-                signal(SIGALRM, handler);
-                alarm(1);
             }
             
             qc = -1;
@@ -569,18 +587,18 @@ int main(int argc, char* argv[])
             #pragma omp for schedule(static, 1) nowait
             for(i = 0; i < ni; ++i)
             {
-                if(qQ)
+                if(QQ)
                     continue;
                 
-                if(fb)
+                if(AL && fb)
                 {
                     dt = difftime(time(NULL), st);
                     
-                    printf("\r> %.2f%%", 100.*i/ni);
-                    printf(" - %02d:%02d:%02d ", dt/3600, (dt/60)%60, dt%60);
+                    printf("> %.2f%%", 100.*i/ni);
+                    printf(" - %02d:%02d:%02d\r", dt/3600, (dt/60)%60, dt%60);
                     fflush(stdout);
                     
-                    fb = 0;
+                    AL = false;
                     alarm(1);
                 }
                 
@@ -689,11 +707,6 @@ int main(int argc, char* argv[])
                 }
             }
             
-            #pragma omp master
-            {
-                signal(SIGALRM, SIG_IGN);
-            }
-            
             #pragma omp critical
             {
                 for(i = 0; i < nd; ++i)
@@ -743,7 +756,7 @@ int main(int argc, char* argv[])
         
         dt = difftime(time(NULL), st);
         
-        printf("\r> done with %.0f pairs", nn);
+        printf("> done with %.0f pairs", nn);
         printf(" in %02d:%02d:%02d  \n", dt/3600, (dt/60)%60, dt%60);
         printf("\n");
     }
