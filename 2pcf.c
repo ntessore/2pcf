@@ -1,7 +1,7 @@
-// 2pcf: two-point correlation function code
+// 2pcf: least squares two-point correlation function code
 // ---
 // author:  Nicolas Tessore <nicolas.tessore@manchester.ac.uk>
-// date:    08 Aug 2018
+// date:    19 Aug 2018
 
 #define _XOPEN_SOURCE 600
 
@@ -16,6 +16,9 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+
+// LAPACK
+extern void dposv_(char*, int*, int*, double*, int*, double*, int*, int*);
 
 static const double PI_HALF = 1.5707963267948966192;
 static const double TWO_PI = 6.2831853071795864769;
@@ -153,20 +156,6 @@ static inline void query(int k, int w, int h, int dy, const int dx[],
     *qc = n;
 }
 
-static inline size_t upper_bound(double x, const double v[], size_t n)
-{
-    size_t i = 0;
-    while(n > 0)
-    {
-        const size_t m = n/2;
-        const size_t j = i+n-m;
-        const double u = v[i+m];
-        n = m;
-        i = x < u ? i : j;
-    }
-    return i;
-}
-
 #include "io.c" // yes, really
 
 static const char* ANIM[] = {
@@ -191,10 +180,9 @@ int main(int argc, char* argv[])
     const char* cfgfile;
     struct config cfg;
     
-    bool fm, xc, ls, th, sc, tc;
-    size_t nd;
-    double dl, dh, sdh;
-    double* db;
+    bool fm, xc, ls, sc, tc;
+    int nd;
+    double dl, dh, sdh, d0, dm, Dl, Dh;
     double ui, uo;
     int S1, S2;
     
@@ -213,7 +201,6 @@ int main(int argc, char* argv[])
     
     double* N;
     double* W;
-    double* T;
     double* X;
     
     int p, np;
@@ -253,7 +240,6 @@ int main(int argc, char* argv[])
     xc = cfg.catalog2 != NULL;
     sc = cfg.coords != COORDS_FLAT;
     ls = cfg.spacing == SPACING_LOG;
-    th = false;
     
 #ifdef _OPENMP
     if(cfg.num_threads)
@@ -284,20 +270,26 @@ int main(int argc, char* argv[])
     
     sdh = sin(dh);
     
-    db = malloc((nd+1)*sizeof(double));
-    if(!db)
-        goto err_alloc;
-    
-    for(i = 0; i <= nd; ++i)
+    if(ls)
     {
-        if(ls)
-            db[i] = exp(log(dl) + i*(log(dh) - log(dl))/nd);
-        else
-            db[i] = dl + i*(dh - dl)/nd;
-        if(sc)
-            db[i] = 2*sin(0.5*db[i]);
-        db[i] = db[i]*db[i];
+        d0 = log(dl);
+        dm = (nd - 1)/(log(dh) - d0);
     }
+    else
+    {
+        d0 = dl;
+        dm = (nd - 1)/(dh - d0);
+    }
+    
+    Dl = dl;
+    Dh = dh;
+    if(sc)
+    {
+        Dl = 2*sin(0.5*Dl);
+        Dh = 2*sin(0.5*Dh);
+    }
+    Dl = Dl*Dl;
+    Dh = Dh*Dh;
     
     S1 = cfg.spin1;
     S2 = cfg.spin2;
@@ -452,7 +444,7 @@ int main(int argc, char* argv[])
     {
         np = 1;
         N = calloc(nd, sizeof(double));
-        W = calloc(nd, sizeof(double));
+        W = calloc(nd*nd, sizeof(double));
         X = calloc(nd*4, sizeof(double));
         if(!N || !W || !X)
             goto err_alloc;
@@ -466,15 +458,6 @@ int main(int argc, char* argv[])
         if(!N || !W)
             goto err_alloc;
     }
-    
-    if(th)
-    {
-        T = calloc(nd*2, sizeof(double));
-        if(!T)
-            goto err_alloc;
-    }
-    else
-        T = NULL;
     
     signal(SIGALRM, handler);
     signal(SIGQUIT, handler);
@@ -496,9 +479,6 @@ int main(int argc, char* argv[])
         else
         {
             Si = Sj = 0;
-            
-            if(p > 0)
-                th = false;
             
             switch(p)
             {
@@ -537,23 +517,21 @@ int main(int argc, char* argv[])
         st = time(NULL);
         dt = 0;
         
-        #pragma omp parallel default(none) shared(st, dt, N, W, T, X, AL, QQ) \
-            private(i, j) firstprivate(fm, xc, ls, sc, th, tc, nd, db, ng, \
-                gw, gh, dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, ANIM, NANIM, \
-                    stdout)
+        #pragma omp parallel default(none) shared(st, dt, N, W, X, AL, QQ) \
+            private(i, j) firstprivate(fm, xc, ls, sc, tc, nd, d0, dm, Dl, \
+                Dh, ng, gw, gh, dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, \
+                    ANIM, NANIM, stdout)
         {
             size_t qc;
             int q, nq;
             int* qr;
             
-            double* db_;
             double* ci_;
             double* cj_;
             int* mj_;
             
             double* N_;
             double* W_;
-            double* T_;
             double* X_;
             
             bool fb;
@@ -565,17 +543,15 @@ int main(int argc, char* argv[])
             
             if(tc)
             {
-                db_ = malloc((nd+1)*sizeof(double));
                 ci_ = malloc(ni*DW*sizeof(double));
                 if(cj != ci)
                     cj_ = malloc(nj*DW*sizeof(double));
                 else
                     cj_ = ci_;
                 mj_ = malloc((ng+1)*sizeof(int));
-                if(!db_ || !ci_ || !cj_ || !mj_)
+                if(!ci_ || !cj_ || !mj_)
                     perror(NULL), abort();
                 
-                memcpy(db_, db, (nd+1)*sizeof(double));
                 memcpy(ci_, ci, ni*DW*sizeof(double));
                 if(cj != ci)
                     memcpy(cj_, cj, nj*DW*sizeof(double));
@@ -583,17 +559,15 @@ int main(int argc, char* argv[])
             }
             else
             {
-                db_ = db;
                 ci_ = ci;
                 cj_ = cj;
                 mj_ = mj;
             }
             
             N_ = calloc(nd, sizeof(double));
-            W_ = calloc(nd, sizeof(double));
-            T_ = th ? calloc(nd*2, sizeof(double)) : NULL;
+            W_ = calloc(nd*nd, sizeof(double));
             X_ = fm ? calloc(nd*4, sizeof(double)) : NULL;
-            if(!N_ || !W_ || (th && !T) || (fm && !X_))
+            if(!N_ || !W_ || (fm && !X_))
                 perror(NULL), abort();
             
             fb = false;
@@ -669,41 +643,43 @@ int main(int argc, char* argv[])
                         const double sdx = cxi*sxj - sxi*cxj;
                         const double cdx = cxi*cxj + sc*sxi*sxj;
                         
-                        const double d1 = cdx*cyi - cyj;
-                        const double d2 = sdx*cyi;
-                        const double d3 = syj - syi;
+                        const double D1 = cdx*cyi - cyj;
+                        const double D2 = sdx*cyi;
+                        const double D3 = syj - syi;
                         
-                        const double d = d1*d1 + d2*d2 + d3*d3;
+                        const double D = D1*D1 + D2*D2 + D3*D3;
                         
-                        if(d >= db_[0] && d < db_[nd])
+                        if(D >= Dl && D < Dh)
                         {
-                            const size_t n = upper_bound(d, db_+1, nd-1);
+                            double d, fl, fh, ww;
+                            int nl, nh;
                             
-                            const double ww = wi*wj;
+                            d = sqrt(D);
+                            if(sc)
+                                d = 2*asin(0.5*d);
+                            if(ls)
+                                d = log(d);
                             
-                            N_[n] += 1;
-                            W_[n] += ww;
+                            fl = dm*(d - d0);
+                            nl = floor(fl);
+                            nh = nl + 1;
+                            fl = nh - fl;
+                            fh = 1 - fl;
                             
-                            if(th)
-                            {
-                                double th, lth;
-                                
-                                const double wn = ww/W_[n];
-                                
-                                th = sc ? 2*asin(0.5*sqrt(d)) : sqrt(d);
-                                lth = log(th);
-                                
-                                T_[0*nd+n] += wn*(th - T_[0*nd+n]);
-                                T_[1*nd+n] += wn*(lth - T_[1*nd+n]);
-                            }
+                            ww = wi*wj;
+                            
+                            N_[nl] += fl;
+                            N_[nh] += fh;
+                            
+                            W_[nl*nd+nl] += ww*fl*fl;
+                            W_[nl*nd+nh] += ww*fl*fh;
+                            W_[nh*nd+nh] += ww*fh*fh;
                             
                             if(fm)
                             {
                                 double sij, cij, sji, cji;
                                 double ai, bi, aj, bj;
                                 double xip_re, xip_im, xim_re, xim_im;
-                                
-                                const double wn = ww/W_[n];
                                 
                                 // e^{I phi_ij} unnormalised
                                 cij = cyi*syj - syi*cyj*cdx;
@@ -726,10 +702,17 @@ int main(int argc, char* argv[])
                                 // xim = (ai + I bi) (aj + I bj)
                                 cmul(ai, bi, aj, bj, &xim_re, &xim_im);
                                 
-                                X_[0*nd+n] += wn*(xip_re - X_[0*nd+n]);
-                                X_[1*nd+n] += wn*(xim_re - X_[1*nd+n]);
-                                X_[2*nd+n] += wn*(xip_im - X_[2*nd+n]);
-                                X_[3*nd+n] += wn*(xim_im - X_[3*nd+n]);
+                                X_[0*nd+nl] += ww*fl*xip_re;
+                                X_[0*nd+nh] += ww*fh*xip_re;
+                                
+                                X_[1*nd+nl] += ww*fl*xim_re;
+                                X_[1*nd+nh] += ww*fh*xim_re;
+                                
+                                X_[2*nd+nl] += ww*fl*xip_im;
+                                X_[2*nd+nh] += ww*fh*xip_im;
+                                
+                                X_[3*nd+nl] += ww*fl*xim_im;
+                                X_[3*nd+nh] += ww*fh*xim_im;
                             }
                         }
                     }
@@ -738,27 +721,19 @@ int main(int argc, char* argv[])
             
             #pragma omp critical
             {
-                for(i = 0; i < nd; ++i)
+                for(int n = 0; n < nd; ++n)
                 {
-                    N[p*nd+i] += N_[i];
-                    W[p*nd+i] += W_[i];
+                    N[p*nd+n] += N_[n];
                     
-                    if(th)
-                    {
-                        const double w = W_[i] > 0 ? W_[i]/W[p*nd+i] : 0;
-                        
-                        T[0*nd+i] += w*(T_[0*nd+i] - T[0*nd+i]);
-                        T[1*nd+i] += w*(T_[1*nd+i] - T[1*nd+i]);
-                    }
+                    for(int m = 0; m < nd; ++m)
+                        W[n*nd+m] += W_[n*nd+m];
                     
                     if(fm)
                     {
-                        const double w = W_[i] > 0 ? W_[i]/W[p*nd+i] : 0;
-                        
-                        X[0*nd+i] += w*(X_[0*nd+i] - X[0*nd+i]);
-                        X[1*nd+i] += w*(X_[1*nd+i] - X[1*nd+i]);
-                        X[2*nd+i] += w*(X_[2*nd+i] - X[2*nd+i]);
-                        X[3*nd+i] += w*(X_[3*nd+i] - X[3*nd+i]);
+                        X[0*nd+n] += X_[0*nd+n];
+                        X[1*nd+n] += X_[1*nd+n];
+                        X[2*nd+n] += X_[2*nd+n];
+                        X[3*nd+n] += X_[3*nd+n];
                     }
                 }
             }
@@ -766,12 +741,10 @@ int main(int argc, char* argv[])
             free(qr);
             free(N_);
             free(W_);
-            free(T_);
             free(X_);
             
             if(tc)
             {
-                free(db_);
                 free(ci_);
                 if(cj != ci)
                     free(cj_);
@@ -780,8 +753,8 @@ int main(int argc, char* argv[])
         }
         
         nn = 0;
-        for(i = 0; i < nd; ++i)
-            nn += N[p*nd+i];
+        for(int n = 0; n < nd; ++n)
+            nn += N[p*nd+n];
         
         dt = difftime(time(NULL), st);
         
@@ -792,32 +765,53 @@ int main(int argc, char* argv[])
         printf("\n");
     }
     
-    if(!fm)
+    // solve A.X = B
+    if(fm)
+    {
+        int n = nd, m = 4, err;
+        
+        printf("%ssolving normal equations%s\n", bf, nf);
+        fflush(stdout);
+        
+        dposv_("L", &n, &m, W, &n, X, &n, &err);
+        
+        if(!err)
+            printf("%s success\n", sv);
+        else
+        {
+            printf("%s error: ", sx);
+            if(err > 0)
+                printf("the %dx%d submatrix is not pos. def.", err, err);
+            else
+                printf("illegal argument");
+            printf("\n");
+        }
+        printf("\n");
+    }
+    else
     {
         const size_t ndd = n1*(n1-1)/2;
         const size_t ndr = n1*n2;
         const size_t nrr = n2*(n2-1)/2;
         
-        for(i = 0; i < nd; ++i)
+        for(int n = 0; n < nd; ++n)
         {
-            W[0*nd+i] /= ndd;
-            W[1*nd+i] /= ndr;
-            W[2*nd+i] /= nrr;
+            W[0*nd+n] /= ndd;
+            W[1*nd+n] /= ndr;
+            W[2*nd+n] /= nrr;
         }
     }
     
-    writexi(cfg.output, cfg.nth, cfg.thmin, cfg.thmax, ls, uo, N, W, T, X);
+    writexi(cfg.output, cfg.nth, cfg.thmin, cfg.thmax, ls, N, W, X);
     
     free(N);
     free(W);
-    free(T);
     free(X);
     free(m1);
     free(m2);
     free(c1);
     free(c2);
     free(dx);
-    free(db);
     
     freecfg(&cfg);
     

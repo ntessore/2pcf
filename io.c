@@ -398,10 +398,10 @@ void printcfg(const struct config* cfg)
     }
     printf("\n");
     printf("output file ..... %s\n", cfg->output);
-    printf("bin count ....... %u\n", cfg->nth);
-    printf("bin range ....... %lg to %lg %s\n", cfg->thmin, cfg->thmax,
+    printf("num. points ..... %u\n", cfg->nth);
+    printf("point range ..... %lg to %lg %s\n", cfg->thmin, cfg->thmax,
                                                     PRN_UNIT[cfg->thunit]);
-    printf("bin spacing ..... %s\n", PRN_SPACING[cfg->spacing]);
+    printf("point spacing ... %s\n", PRN_SPACING[cfg->spacing]);
     printf("\n");
     printf("grid size ....... %g x %g %s^2\n", cfg->gridx, cfg->gridy,
                                                     PRN_UNIT[cfg->thunit]);
@@ -537,12 +537,12 @@ err_alloc:
 }
 
 void writexi(const char* f, size_t n, double a, double b, bool ls,
-                    double uo, double* N, double* W, double* T, double* X)
+                                        double* N, double* W, double* X)
 {
     FILE* fp;
-    size_t i;
+    size_t i, j;
     
-    double th, mth, mlth, np;
+    double th;
     
     if(strcmp(f, "-") == 0)
         fp = stdout;
@@ -553,19 +553,16 @@ void writexi(const char* f, size_t n, double a, double b, bool ls,
             goto err_fopen;
     }
     
-    fprintf(fp, "# %-24s", "th");
-    if(T)
-    {
-        fprintf(fp, "  %-24s", "<th>");
-        fprintf(fp, "  %-24s", "<log th>");
-    }
+    fprintf(fp, "# %-24s", "theta");
     if(X)
     {
         fprintf(fp, "  %-24s", "xip");
         fprintf(fp, "  %-24s", "xim");
         fprintf(fp, "  %-24s", "xip_im");
         fprintf(fp, "  %-24s", "xim_im");
-        fprintf(fp, "  %-24s", "wht");
+        fprintf(fp, "  %-24s", "np");
+        for(i = 0; i < n; ++i)
+            fprintf(fp, "  W_%-22zu", i+1);
     }
     else
     {
@@ -574,57 +571,32 @@ void writexi(const char* f, size_t n, double a, double b, bool ls,
         fprintf(fp, "  %-24s", "DR");
         fprintf(fp, "  %-24s", "RR");
     }
-    fprintf(fp, "  %-24s", "np");
     fprintf(fp, "\n");
     
     for(i = 0; i < n; ++i)
     {
-        np = N[i];
-        
         if(ls)
-            th = exp(log(a) + (i + 0.5)*(log(b) - log(a))/n);
+            th = exp(log(a) + i*(log(b) - log(a))/(n - 1));
         else
-            th = a + (i + 0.5)*(b - a)/n;
+            th = a + i*(b - a)/(n - 1);
         
         fprintf(fp, " % .18e", th);
         
-        if(T)
-        {
-            mth = T[0*n+i]/uo;
-            mlth = T[1*n+i] - log(uo);
-            
-            fprintf(fp, " % .18e", mth);
-            fprintf(fp, " % .18e", mlth);
-        }
-        
         if(X)
         {
-            double xip_re = X[0*n+i];
-            double xim_re = X[1*n+i];
-            double xip_im = X[2*n+i];
-            double xim_im = X[3*n+i];
-            double wht = W[i];
+            fprintf(fp, " % .18e", X[0*n+i]);
+            fprintf(fp, " % .18e", X[1*n+i]);
+            fprintf(fp, " % .18e", X[2*n+i]);
+            fprintf(fp, " % .18e", X[3*n+i]);
             
-            fprintf(fp, " % .18e", xip_re);
-            fprintf(fp, " % .18e", xim_re);
-            fprintf(fp, " % .18e", xip_im);
-            fprintf(fp, " % .18e", xim_im);
-            fprintf(fp, " % .18e", wht);
-        }
-        else
-        {
-            double dd = W[0*n+i];
-            double dr = W[1*n+i];
-            double rr = W[2*n+i];
-            double xi = (dd - 2*dr + rr)/rr;
+            fprintf(fp, " % .18e", N[i]);
             
-            fprintf(fp, " % .18e", xi);
-            fprintf(fp, " % .18e", dd);
-            fprintf(fp, " % .18e", dr);
-            fprintf(fp, " % .18e", rr);
+            for(j = 0; j < i; ++j)
+                fprintf(fp, " % .18e", W[j*n+i]);
+            for(; j < n; ++j)
+                fprintf(fp, " % .18e", W[i*n+j]);
         }
         
-        fprintf(fp, " % .18e", np);
         fprintf(fp, "\n");
     }
     
