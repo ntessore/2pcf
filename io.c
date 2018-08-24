@@ -431,9 +431,14 @@ double* readc(const char* f, double ui, bool fm, bool cf, int sg, size_t* n)
     char* sw;
     double x, y, u, v, w;
     
-    fp = fopen(f, "r");
-    if(!fp)
-        goto err_fopen;
+    if(strcmp(f, "-") == 0)
+        fp = stdin;
+    else
+    {
+        fp = fopen(f, "r");
+        if(!fp)
+            goto err_fopen;
+    }
     
     i = 0;
     a = 1;
@@ -515,7 +520,8 @@ double* readc(const char* f, double ui, bool fm, bool cf, int sg, size_t* n)
         }
     }
     
-    fclose(fp);
+    if(fp != stdin)
+        fclose(fp);
     
     d = realloc(d, i*DW*sizeof(double));
     if(!d)
@@ -543,9 +549,14 @@ void writexi(const char* f, size_t n, double a, double b, bool ls,
     
     double th, mth, mlth, np;
     
-    fp = fopen(f, "w");
-    if(!fp)
-        goto err_fopen;
+    if(strcmp(f, "-") == 0)
+        fp = stdout;
+    else
+    {
+        fp = fopen(f, "w");
+        if(!fp)
+            goto err_fopen;
+    }
     
     fprintf(fp, "# %-24s", "th");
     if(T)
@@ -622,7 +633,8 @@ void writexi(const char* f, size_t n, double a, double b, bool ls,
         fprintf(fp, "\n");
     }
     
-    fclose(fp);
+    if(fp != stdout)
+        fclose(fp);
     
     return;
     
