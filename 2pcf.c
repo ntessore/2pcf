@@ -182,7 +182,7 @@ int main(int argc, char* argv[])
     
     bool xc, ls, sc, tc;
     int nd;
-    double dl, dh, sdh, d0, dm, Dl, Dh;
+    double dl, dh, sdh, Dl, Dh, D0, Dm;
     double ui, uo;
     int S1, S2;
     
@@ -255,17 +255,6 @@ int main(int argc, char* argv[])
     
     sdh = sin(dh);
     
-    if(ls)
-    {
-        d0 = log(dl);
-        dm = (nd - 1)/(log(dh) - d0);
-    }
-    else
-    {
-        d0 = dl;
-        dm = (nd - 1)/(dh - d0);
-    }
-    
     Dl = dl;
     Dh = dh;
     if(sc)
@@ -275,6 +264,17 @@ int main(int argc, char* argv[])
     }
     Dl = Dl*Dl;
     Dh = Dh*Dh;
+    
+    if(ls)
+    {
+        D0 = log(Dl);
+        Dm = (nd - 1)/(log(Dh) - D0);
+    }
+    else
+    {
+        D0 = Dl;
+        Dm = (nd - 1)/(Dh - D0);
+    }
     
     S1 = cfg.spin1;
     S2 = cfg.spin2;
@@ -412,7 +412,7 @@ int main(int argc, char* argv[])
     dt = 0;
     
     #pragma omp parallel default(none) shared(st, dt, N, W, X, AL, QQ) \
-        private(i, j) firstprivate(xc, ls, sc, tc, nd, d0, dm, Dl, Dh, ng, \
+        private(i, j) firstprivate(xc, ls, sc, tc, nd, Dl, Dh, D0, Dm, ng, \
             gw, gh, dx, dy, n1, n2, c1, c2, ma, S1, S2, ANIM, NANIM, stdout)
     {
         size_t qc, jh;
@@ -547,29 +547,16 @@ int main(int argc, char* argv[])
                         double ai, bi, aj, bj;
                         double xip_re, xip_im, xim_re, xim_im;
                         
-                        double d, fl, fh, ww;
+                        double fl, fh, ww;
                         int nl, nh;
                         
-                        d = sqrt(D);
-                        if(sc)
-                            d = 2*asin(0.5*d);
-                        if(ls)
-                            d = log(d);
-                        
-                        fl = dm*(d - d0);
+                        fl = Dm*((ls ? log(D) : D) - D0);
                         nl = floor(fl);
                         nh = nl + 1;
                         fl = nh - fl;
                         fh = 1 - fl;
                         
                         ww = wi*wj;
-                        
-                        N_[nl] += fl;
-                        N_[nh] += fh;
-                        
-                        W_[nl*nd+nl] += ww*fl*fl;
-                        W_[nl*nd+nh] += ww*fl*fh;
-                        W_[nh*nd+nh] += ww*fh*fh;
                         
                         // e^{I phi_ij} unnormalised
                         ai = cyi*syj - syi*cyj*cdx;
@@ -591,6 +578,13 @@ int main(int argc, char* argv[])
                         cmul(ai, bi, aj, -bj, &xip_re, &xip_im);
                         // xim = (ai + I bi) (aj + I bj)
                         cmul(ai, bi, aj, bj, &xim_re, &xim_im);
+                        
+                        N_[nl] += fl;
+                        N_[nh] += fh;
+                        
+                        W_[nl*nd+nl] += ww*fl*fl;
+                        W_[nl*nd+nh] += ww*fl*fh;
+                        W_[nh*nd+nh] += ww*fh*fh;
                         
                         X_[0*nd+nl] += ww*fl*xip_re;
                         X_[0*nd+nh] += ww*fh*xip_re;
@@ -678,7 +672,7 @@ int main(int argc, char* argv[])
         printf("\n");
     }
     
-    writexi(cfg.output, cfg.nth, cfg.thmin, cfg.thmax, ls, N, X);
+    writexi(cfg.output, nd, Dl, Dh, uo, sc, ls, N, X);
     
     free(N);
     free(W);

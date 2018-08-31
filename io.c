@@ -519,13 +519,13 @@ err_alloc:
     exit(EXIT_FAILURE);
 }
 
-void writexi(const char* f, size_t n, double a, double b, bool ls,
-                                                        double* N, double* X)
+void writexi(const char* f, size_t n, double a, double b, double u,
+                                    bool sc, bool ls, double* N, double* X)
 {
     FILE* fp;
     size_t i;
     
-    double th;
+    double d;
     
     if(strcmp(f, "-") == 0)
         fp = stdout;
@@ -547,11 +547,14 @@ void writexi(const char* f, size_t n, double a, double b, bool ls,
     for(i = 0; i < n; ++i)
     {
         if(ls)
-            th = exp(log(a) + i*(log(b) - log(a))/(n - 1));
+            d = exp(log(a) + i*(log(b) - log(a))/(n - 1));
         else
-            th = a + i*(b - a)/(n - 1);
+            d = a + i*(b - a)/(n - 1);
+        d = sqrt(d);
+        if(sc)
+            d = 2*asin(0.5*d);
         
-        fprintf(fp, " % .18e", th);
+        fprintf(fp, " % .18e", d/u);
         
         fprintf(fp, " % .18e", X[0*n+i]);
         fprintf(fp, " % .18e", X[1*n+i]);
