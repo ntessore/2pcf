@@ -650,6 +650,11 @@ int main(int argc, char* argv[])
     printf(" in %02d:%02d:%02d  \n", dt/3600, (dt/60)%60, dt%60);
     printf("\n");
     
+    if(cfg.matrix)
+        writetxt(cfg.matrix, nd, nd, W);
+    if(cfg.rhs)
+        writetxt(cfg.rhs, nd, 4, X);
+    
     // solve A.X = B
     {
         int n = nd, m = 4, err;

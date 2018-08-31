@@ -47,6 +47,8 @@ struct config {
     int signs1;
     int signs2;
     char* output;
+    char* matrix;
+    char* rhs;
     int nth;
     double thmin;
     double thmax;
@@ -208,6 +210,14 @@ void readcfg(const char* f, struct config* cfg)
         {
             cfg->output = copystr(val);
         }
+        else if(strcmp(key, "matrix") == 0)
+        {
+            cfg->matrix = copystr(val);
+        }
+        else if(strcmp(key, "rhs") == 0)
+        {
+            cfg->rhs = copystr(val);
+        }
         else if(strcmp(key, "nth") == 0)
         {
             cfg->nth = atoi(val);
@@ -322,6 +332,8 @@ void freecfg(struct config* cfg)
     free(cfg->catalog1);
     free(cfg->catalog2);
     free(cfg->output);
+    free(cfg->matrix);
+    free(cfg->rhs);
 }
 
 void printcfg(const struct config* cfg)
@@ -373,6 +385,10 @@ void printcfg(const struct config* cfg)
     }
     printf("\n");
     printf("output file ..... %s\n", cfg->output);
+    if(cfg->matrix)
+        printf("matrix file ..... %s\n", cfg->matrix);
+    if(cfg->rhs)
+        printf("r.h.s. file ..... %s\n", cfg->rhs);
     printf("num. points ..... %u\n", cfg->nth);
     printf("point range ..... %lg to %lg %s\n", cfg->thmin, cfg->thmax,
                                                     PRN_UNIT[cfg->thunit]);
@@ -544,6 +560,37 @@ void writexi(const char* f, size_t n, double a, double b, bool ls,
         
         fprintf(fp, " % .18e", N[i]);
         
+        fprintf(fp, "\n");
+    }
+    
+    if(fp != stdout)
+        fclose(fp);
+    
+    return;
+    
+err_fopen:
+    perror(f);
+    exit(EXIT_FAILURE);
+}
+
+void writetxt(const char* f, int n, int m, double* u)
+{
+    FILE* fp;
+    int i, j;
+    
+    if(strcmp(f, "-") == 0)
+        fp = stdout;
+    else
+    {
+        fp = fopen(f, "w");
+        if(!fp)
+            goto err_fopen;
+    }
+    
+    for(i = 0; i < n; ++i)
+    {
+        for(j = 0; j < m; ++j)
+            fprintf(fp, " % .18e", u[j*n+i]);
         fprintf(fp, "\n");
     }
     
