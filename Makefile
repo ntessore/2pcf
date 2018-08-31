@@ -7,7 +7,7 @@ LDLIBS += -lm
 ifdef DEBUG
 CFLAGS += -O0 -g -DDEBUG
 else
-CFLAGS += -Ofast
+CFLAGS += -Ofast -march=native -mfpmath=sse
 endif
 
 ifdef OPENMP
