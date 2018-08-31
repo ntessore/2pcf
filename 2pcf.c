@@ -222,11 +222,16 @@ int main(int argc, char* argv[])
         sv = sx = ">";
     }
     
-    if(argc > 2)
+    if(argc > 4)
         goto err_usage;
     
     cfgfile = argc > 1 ? argv[1] : "2pcf.cfg";
     readcfg(cfgfile, &cfg);
+    
+    if(argc > 2)
+        free(cfg.catalog1), cfg.catalog1 = copystr(argv[2]);
+    if(argc > 3)
+        free(cfg.catalog2), cfg.catalog2 = copystr(argv[3]);
     
     xc = cfg.catalog2 != NULL;
     sc = cfg.coords != COORDS_FLAT;
@@ -688,7 +693,7 @@ int main(int argc, char* argv[])
     return EXIT_SUCCESS;
     
 err_usage:
-    fprintf(stderr, "usage: 2pcf [FILE]\n");
+    fprintf(stderr, "usage: 2pcf [config] [catalog] [catalog2]\n");
     return EXIT_FAILURE;
     
 err_alloc:
