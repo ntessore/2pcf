@@ -1,9 +1,5 @@
 #include <string.h>
 
-enum { MODE_NONE, MODE_POINTS, MODE_FIELD, NUM_MODE };
-char* CFG_MODE[] = { "none", "points", "field" };
-char* PRN_MODE[] = { "none", "points", "field" };
-
 enum { SPACING_LIN, SPACING_LOG, NUM_SPACING };
 char* CFG_SPACING[] = { "lin", "log" };
 char* PRN_SPACING[] = { "linear", "logarithmic" };
@@ -40,7 +36,6 @@ const double UCONV[] = {
 #endif
 
 struct config {
-    int mode;
     char* catalog1;
     char* catalog2;
     int dunit;
@@ -107,13 +102,7 @@ void readcfg(const char* f, struct config* cfg)
         if(!val || *val == '#')
             goto err_no_value;
         
-        if(strcmp(key, "mode") == 0)
-        {
-            cfg->mode = findstr(val, NUM_MODE, CFG_MODE);
-            if(cfg->mode == MODE_NONE || cfg->mode == NUM_MODE)
-                goto err_bad_value;
-        }
-        else if(strcmp(key, "catalog") == 0)
+        if(strcmp(key, "catalog") == 0)
         {
             cfg->catalog1 = copystr(val);
         }
@@ -279,8 +268,6 @@ void readcfg(const char* f, struct config* cfg)
     
     fclose(fp);
     
-    if(cfg->mode == MODE_NONE)
-        { key = "mode"; goto err_missing_key; }
     if(!cfg->catalog1)
         { key = "catalog"; goto err_missing_key; }
     if(!cfg->output)
@@ -339,61 +326,49 @@ void freecfg(struct config* cfg)
 
 void printcfg(const struct config* cfg)
 {
-    printf("input type ...... %s\n", PRN_MODE[cfg->mode]);
-    if(cfg->mode == MODE_POINTS)
-    {
-        printf("data catalog .... %s\n", cfg->catalog1);
-        printf("random catalog .. %s\n", cfg->catalog2);
-    }
+    if(!cfg->catalog2)
+        printf("catalog ......... %s\n", cfg->catalog1);
     else
     {
-        if(!cfg->catalog2)
-            printf("catalog ......... %s\n", cfg->catalog1);
-        else
-        {
-            printf("catalog 1 ....... %s\n", cfg->catalog1);
-            printf("catalog 2 ....... %s\n", cfg->catalog2);
-        }
+        printf("catalog 1 ....... %s\n", cfg->catalog1);
+        printf("catalog 2 ....... %s\n", cfg->catalog2);
     }
     printf("data units ...... %s\n", PRN_UNIT[cfg->dunit]);
     printf("coordinates ..... %s\n", PRN_COORDS[cfg->coords]);
-    if(cfg->mode == MODE_FIELD)
+    if(!cfg->catalog2)
     {
-        if(!cfg->catalog2)
+        if(cfg->field1)
         {
-            if(cfg->field1)
-            {
-                printf("field type ...... complex spin-%d\n", cfg->spin1);
-                printf("signature ....... %s\n", PRN_SIGNS[cfg->signs1]);
-            }
-            else
-            {
-                printf("field type ...... real\n");
-                printf("signature ....... %su\n", cfg->signs1&2 ? "-" : "+");
-            }
+            printf("field type ...... complex spin-%d\n", cfg->spin1);
+            printf("signature ....... %s\n", PRN_SIGNS[cfg->signs1]);
         }
         else
         {
-            if(cfg->field1)
-            {
-                printf("field 1 type .... complex spin-%d\n", cfg->spin1);
-                printf("signature 1 ..... %s\n", PRN_SIGNS[cfg->signs1]);
-            }
-            else
-            {
-                printf("field 1 type .... real\n");
-                printf("signature 1 ..... %su\n", cfg->signs1&2 ? "-" : "+");
-            }
-            if(cfg->field2)
-            {
-                printf("field 2 type .... complex spin-%d\n", cfg->spin2);
-                printf("signature 2 ..... %s\n", PRN_SIGNS[cfg->signs2]);
-            }
-            else
-            {
-                printf("field 2 type .... real\n");
-                printf("signature 2 ..... %su\n", cfg->signs2&2 ? "-" : "+");
-            }
+            printf("field type ...... real\n");
+            printf("signature ....... %su\n", cfg->signs1&2 ? "-" : "+");
+        }
+    }
+    else
+    {
+        if(cfg->field1)
+        {
+            printf("field 1 type .... complex spin-%d\n", cfg->spin1);
+            printf("signature 1 ..... %s\n", PRN_SIGNS[cfg->signs1]);
+        }
+        else
+        {
+            printf("field 1 type .... real\n");
+            printf("signature 1 ..... %su\n", cfg->signs1&2 ? "-" : "+");
+        }
+        if(cfg->field2)
+        {
+            printf("field 2 type .... complex spin-%d\n", cfg->spin2);
+            printf("signature 2 ..... %s\n", PRN_SIGNS[cfg->signs2]);
+        }
+        else
+        {
+            printf("field 2 type .... real\n");
+            printf("signature 2 ..... %su\n", cfg->signs2&2 ? "-" : "+");
         }
     }
     printf("\n");
@@ -412,7 +387,7 @@ void printcfg(const struct config* cfg)
 #endif
 }
 
-double* readc(const char* f, double ui, bool fm, bool cf, int sg, size_t* n)
+double* readc(const char* f, double ui, bool cf, int sg, size_t* n)
 {
     FILE* fp;
     int l;
@@ -446,8 +421,8 @@ double* readc(const char* f, double ui, bool fm, bool cf, int sg, size_t* n)
     {
         sx = strtok(buf, " \t\r\n");
         sy = strtok(NULL, " \t\r\n");
-        su = fm ? strtok(NULL, " \t\r\n") : NULL;
-        sv = fm && cf ? strtok(NULL, " \t\r\n") : NULL;
+        su = strtok(NULL, " \t\r\n");
+        sv = cf ? strtok(NULL, " \t\r\n") : NULL;
         sw = strtok(NULL, " \t\r\n");
         
         if(!sx || *sx == '#')
@@ -462,34 +437,26 @@ double* readc(const char* f, double ui, bool fm, bool cf, int sg, size_t* n)
         x = atof(sx)*ui;
         y = atof(sy)*ui;
         
-        if(fm)
+        if(!su || *su == '#')
         {
-            if(!su || *su == '#')
+            fprintf(stderr, "error: %s:%d: missing `u` value\n", f, l);
+            exit(EXIT_FAILURE);
+        }
+        
+        u = atof(su);
+        
+        if(cf)
+        {
+            if(!sv || *sv == '#')
             {
-                fprintf(stderr, "error: %s:%d: missing `u` value\n", f, l);
+                fprintf(stderr, "error: %s:%d: missing `v` value\n", f, l);
                 exit(EXIT_FAILURE);
             }
             
-            u = atof(su);
-            
-            if(cf)
-            {
-                if(!sv || *sv == '#')
-                {
-                    fprintf(stderr, "error: %s:%d: missing `v` value\n", f, l);
-                    exit(EXIT_FAILURE);
-                }
-                
-                v = atof(sv);
-            }
-            else
-                v = 0;
+            v = atof(sv);
         }
         else
-        {
-            u = 0;
             v = 0;
-        }
         
         if(!sw || *sw == '#')
             w = 1;
@@ -537,10 +504,10 @@ err_alloc:
 }
 
 void writexi(const char* f, size_t n, double a, double b, bool ls,
-                                        double* N, double* W, double* X)
+                                                        double* N, double* X)
 {
     FILE* fp;
-    size_t i, j;
+    size_t i;
     
     double th;
     
@@ -554,23 +521,11 @@ void writexi(const char* f, size_t n, double a, double b, bool ls,
     }
     
     fprintf(fp, "# %-24s", "theta");
-    if(X)
-    {
-        fprintf(fp, "  %-24s", "xip");
-        fprintf(fp, "  %-24s", "xim");
-        fprintf(fp, "  %-24s", "xip_im");
-        fprintf(fp, "  %-24s", "xim_im");
-        fprintf(fp, "  %-24s", "np");
-        for(i = 0; i < n; ++i)
-            fprintf(fp, "  W_%-22zu", i+1);
-    }
-    else
-    {
-        fprintf(fp, "  %-24s", "xi");
-        fprintf(fp, "  %-24s", "DD");
-        fprintf(fp, "  %-24s", "DR");
-        fprintf(fp, "  %-24s", "RR");
-    }
+    fprintf(fp, "  %-24s", "xip");
+    fprintf(fp, "  %-24s", "xim");
+    fprintf(fp, "  %-24s", "xip_im");
+    fprintf(fp, "  %-24s", "xim_im");
+    fprintf(fp, "  %-24s", "np");
     fprintf(fp, "\n");
     
     for(i = 0; i < n; ++i)
@@ -582,20 +537,12 @@ void writexi(const char* f, size_t n, double a, double b, bool ls,
         
         fprintf(fp, " % .18e", th);
         
-        if(X)
-        {
-            fprintf(fp, " % .18e", X[0*n+i]);
-            fprintf(fp, " % .18e", X[1*n+i]);
-            fprintf(fp, " % .18e", X[2*n+i]);
-            fprintf(fp, " % .18e", X[3*n+i]);
-            
-            fprintf(fp, " % .18e", N[i]);
-            
-            for(j = 0; j < i; ++j)
-                fprintf(fp, " % .18e", W[j*n+i]);
-            for(; j < n; ++j)
-                fprintf(fp, " % .18e", W[i*n+j]);
-        }
+        fprintf(fp, " % .18e", X[0*n+i]);
+        fprintf(fp, " % .18e", X[1*n+i]);
+        fprintf(fp, " % .18e", X[2*n+i]);
+        fprintf(fp, " % .18e", X[3*n+i]);
+        
+        fprintf(fp, " % .18e", N[i]);
         
         fprintf(fp, "\n");
     }
