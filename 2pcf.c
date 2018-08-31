@@ -169,6 +169,13 @@ static inline size_t upper_bound(double x, const double v[], size_t n)
 
 #include "io.c" // yes, really
 
+static const char* ANIM[] = {
+    "\033[34m\xe2\xa0\xb7\033[0m", "\033[34m\xe2\xa0\xaf\033[0m",
+    "\033[34m\xe2\xa0\x9f\033[0m", "\033[34m\xe2\xa0\xbb\033[0m",
+    "\033[34m\xe2\xa0\xbd\033[0m", "\033[34m\xe2\xa0\xbe\033[0m"
+};
+static const int NANIM = sizeof(ANIM)/sizeof(*ANIM);
+
 volatile sig_atomic_t AL;
 volatile sig_atomic_t QQ;
 
@@ -221,6 +228,21 @@ int main(int argc, char* argv[])
     
     size_t i, j;
     
+    char* bf, *nf, *sv, *sx;
+    
+    if(isatty(fileno(stdout)))
+    {
+        bf = "\033[1m";
+        nf = "\033[0m";
+        sv = "\033[32m\xe2\x9c\x94\033[0m";
+        sx = "\033[31m\xe2\x9c\x98\033[0m";
+    }
+    else
+    {
+        bf = nf = "";
+        sv = sx = ">";
+    }
+    
     if(argc > 2)
         goto err_usage;
     
@@ -247,7 +269,11 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
     
-    printcfg(cfgfile, &cfg);
+    printf("\n");
+    printf("%sconfiguration file %s%s\n", bf, cfgfile, nf);
+    printf("\n");
+    printcfg(&cfg);
+    printf("\n");
     
     ui = UCONV[cfg.dunit];
     uo = UCONV[cfg.thunit];
@@ -276,22 +302,24 @@ int main(int argc, char* argv[])
     S1 = cfg.spin1;
     S2 = cfg.spin2;
     
-    printf("reading %s\n", fm ? xc ? "catalog 1" : "catalog" : "data catalog");
+    printf("%sreading %s%s\n", bf,
+                    fm ? xc ? "catalog 1" : "catalog" : "data catalog", nf);
     fflush(stdout);
     
     c1 = readc(cfg.catalog1, ui, fm, cfg.field1, cfg.signs1, &n1);
     
-    printf("> done with %zu points\n", n1);
+    printf("%s done with %zu points\n", sv, n1);
     printf("\n");
     
     if(xc)
     {
-        printf("reading %s\n", fm ? "catalog 2" : "random catalog");
+        printf("%sreading %s%s\n", bf,
+                                fm ? "catalog 2" : "random catalog", nf);
         fflush(stdout);
         
         c2 = readc(cfg.catalog2, ui, fm, cfg.field2, cfg.signs2, &n2);
         
-        printf("> done with %zu points\n", n2);
+        printf("%s done with %zu points\n", sv, n2);
         printf("\n");
     }
     else
@@ -300,7 +328,7 @@ int main(int argc, char* argv[])
         n2 = 0;
     }
     
-    printf("building index\n");
+    printf("%sbuilding index%s\n", bf, nf);
     fflush(stdout);
     
     gx = cfg.gridx*uo;
@@ -403,7 +431,7 @@ int main(int argc, char* argv[])
     else
         m2 = NULL;
     
-    printf("> done with %zu x %zu grid cells\n", gw, gh);
+    printf("%s done with %zu x %zu grid cells\n", sv, gw, gh);
     printf("\n");
     
     if(sc)
@@ -456,7 +484,7 @@ int main(int argc, char* argv[])
     {
         if(fm)
         {
-            printf("calculating correlations\n");
+            printf("%scalculating correlations%s\n", bf, nf);
             fflush(stdout);
             
             ci = c1, ni = n1, Si = S1;
@@ -475,7 +503,7 @@ int main(int argc, char* argv[])
             switch(p)
             {
             case 0:
-                printf("calculating DD correlations\n");
+                printf("%scalculating DD correlations%s\n", bf, nf);
                 fflush(stdout);
                 
                 xc = false;
@@ -485,7 +513,7 @@ int main(int argc, char* argv[])
                 break;
                 
             case 1:
-                printf("calculating DR correlations\n");
+                printf("%scalculating DR correlations%s\n", bf, nf);
                 fflush(stdout);
                 
                 xc = true;
@@ -495,7 +523,7 @@ int main(int argc, char* argv[])
                 break;
                 
             case 2:
-                printf("calculating RR correlations\n");
+                printf("%scalculating RR correlations%s\n", bf, nf);
                 fflush(stdout);
                 
                 xc = false;
@@ -511,7 +539,8 @@ int main(int argc, char* argv[])
         
         #pragma omp parallel default(none) shared(st, dt, N, W, T, X, AL, QQ) \
             private(i, j) firstprivate(fm, xc, ls, sc, th, tc, nd, db, ng, \
-                gw, gh, dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, stdout)
+                gw, gh, dx, dy, p, ni, nj, ci, cj, mj, Si, Sj, ANIM, NANIM, \
+                    stdout)
         {
             size_t qc;
             int q, nq;
@@ -577,7 +606,7 @@ int main(int argc, char* argv[])
                 alarm(1);
                 
 #ifdef _OPENMP
-                printf("> %d thread(s)\r", omp_get_num_threads());
+                printf("\r%s %d thread(s) ", ANIM[0], omp_get_num_threads());
                 fflush(stdout);
 #endif
             }
@@ -594,8 +623,8 @@ int main(int argc, char* argv[])
                 {
                     dt = difftime(time(NULL), st);
                     
-                    printf("> %.2f%%", 100.*i/ni);
-                    printf(" - %02d:%02d:%02d\r", dt/3600, (dt/60)%60, dt%60);
+                    printf("\r%s %.2f%%", ANIM[dt%NANIM], 100.*i/ni);
+                    printf(" in %02d:%02d:%02d ", dt/3600, (dt/60)%60, dt%60);
                     fflush(stdout);
                     
                     AL = false;
@@ -756,7 +785,9 @@ int main(int argc, char* argv[])
         
         dt = difftime(time(NULL), st);
         
-        printf("> done with %.0f pairs", nn);
+        if(isatty(fileno(stdin)))
+            printf("\r");
+        printf("%s done with %.0f pairs", sv, nn);
         printf(" in %02d:%02d:%02d  \n", dt/3600, (dt/60)%60, dt%60);
         printf("\n");
     }

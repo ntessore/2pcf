@@ -337,11 +337,8 @@ void freecfg(struct config* cfg)
     free(cfg->output);
 }
 
-void printcfg(const char* cfgfile, const struct config* cfg)
+void printcfg(const struct config* cfg)
 {
-    printf("\n");
-    printf("configuration ... %s\n", cfgfile);
-    printf("\n");
     printf("input type ...... %s\n", PRN_MODE[cfg->mode]);
     if(cfg->mode == MODE_POINTS)
     {
@@ -408,12 +405,10 @@ void printcfg(const char* cfgfile, const struct config* cfg)
     printf("\n");
     printf("grid size ....... %g x %g %s^2\n", cfg->gridx, cfg->gridy,
                                                     PRN_UNIT[cfg->thunit]);
-    printf("\n");
-    
 #ifdef _OPENMP
+    printf("\n");
     printf("num. threads .... %d\n", omp_get_max_threads());
     printf("thread data ..... %s\n", PRN_TDATA[cfg->thread_data]);
-    printf("\n");
 #endif
 }
 
