@@ -613,7 +613,7 @@ int main(int argc, char* argv[])
             {
                 N[n] += N_[n];
                 
-                for(int m = 0; m < nd; ++m)
+                for(int m = n; m < nd; ++m)
                     W[n*nd+m] += W_[n*nd+m];
                 
                 X[0*nd+n] += X_[0*nd+n];
@@ -640,6 +640,10 @@ int main(int argc, char* argv[])
     nn = 0;
     for(int n = 0; n < nd; ++n)
         nn += N[n];
+    
+    for(int n = 0; n < nd; ++n)
+        for(int m = 0; m < n; ++m)
+            W[n*nd+m] = W[m*nd+n];
     
     dt = difftime(time(NULL), st);
     
