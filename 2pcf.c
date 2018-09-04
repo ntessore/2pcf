@@ -330,14 +330,24 @@ int main(int argc, char* argv[])
     }
     else
     {
-        xl = xh = c2[0];
-        yl = yh = c2[1];
-        for(i = 1; i < n2; ++i)
+        xl = xh = c1[0];
+        yl = yh = c1[1];
+        for(i = 1; i < n1; ++i)
         {
-            if(c2[i*DW+0] < xl) xl = c2[i*DW+0];
-            if(c2[i*DW+0] > xh) xh = c2[i*DW+0];
-            if(c2[i*DW+1] < yl) yl = c2[i*DW+1];
-            if(c2[i*DW+1] > yh) yh = c2[i*DW+1];
+            if(c1[i*DW+0] < xl) xl = c1[i*DW+0];
+            if(c1[i*DW+0] > xh) xh = c1[i*DW+0];
+            if(c1[i*DW+1] < yl) yl = c1[i*DW+1];
+            if(c1[i*DW+1] > yh) yh = c1[i*DW+1];
+        }
+        if(xc)
+        {
+            for(i = 0; i < n2; ++i)
+            {
+                if(c2[i*DW+0] < xl) xl = c2[i*DW+0];
+                if(c2[i*DW+0] > xh) xh = c2[i*DW+0];
+                if(c2[i*DW+1] < yl) yl = c2[i*DW+1];
+                if(c2[i*DW+1] > yh) yh = c2[i*DW+1];
+            }
         }
         
         gw = floor((xh - xl)/gx) + 1;
@@ -366,14 +376,20 @@ int main(int argc, char* argv[])
             dx[i] = ceil(dh/gx);
     }
     
+    for(i = 0; i < n1; ++i)
+        c1[i*DW+7] = index(c1[i*DW+0] - xl, c1[i*DW+1] - yl, gx, gy, gw);
+    qsort(c1, n1, DW*sizeof(double), mapsort);
+    
+    if(xc)
+    {
+        for(i = 0; i < n2; ++i)
+            c2[i*DW+7] = index(c2[i*DW+0] - xl, c2[i*DW+1] - yl, gx, gy, gw);
+        qsort(c2, n2, DW*sizeof(double), mapsort);
+    }
+    
     ma = malloc((ng+1)*sizeof(int));
     if(!ma)
         goto err_alloc;
-    
-    for(i = 0; i < n2; ++i)
-        c2[i*DW+7] = index(c2[i*DW+0] - xl, c2[i*DW+1] - yl, gx, gy, gw);
-    
-    qsort(c2, n2, DW*sizeof(double), mapsort);
     
     for(i = 0, j = 0; i < ng; ++i)
     {
@@ -393,10 +409,13 @@ int main(int argc, char* argv[])
             sincos(c1[i*DW+0], &c1[i*DW+0], &c1[i*DW+2]);
             sincos(c1[i*DW+1], &c1[i*DW+1], &c1[i*DW+3]);
         }
-        for(i = 0; i < n2; ++i)
+        if(xc)
         {
-            sincos(c2[i*DW+0], &c2[i*DW+0], &c2[i*DW+2]);
-            sincos(c2[i*DW+1], &c2[i*DW+1], &c2[i*DW+3]);
+            for(i = 0; i < n2; ++i)
+            {
+                sincos(c2[i*DW+0], &c2[i*DW+0], &c2[i*DW+2]);
+                sincos(c2[i*DW+1], &c2[i*DW+1], &c2[i*DW+3]);
+            }
         }
     }
     
@@ -568,7 +587,7 @@ int main(int argc, char* argv[])
                         bi = -cyj*sdx;
                         // e^{I S1 phi_ij}
                         nsincos(S1, ai, bi, &bi, &ai);
-                        // ai + I bi = (ui + I vi) e^{-I S1 phi_i}
+                        // ai + I bi = (ui + I vi) e^{-I S1 phi_ij}
                         cmul(ui, vi, ai, -bi, &ai, &bi);
                         
                         // e^{I phi_ji} unnormalised
