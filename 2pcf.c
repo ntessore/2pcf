@@ -18,7 +18,7 @@
 #endif
 
 // LAPACK
-extern void dposv_(char*, int*, int*, double*, int*, double*, int*, int*);
+extern void dptsv_(int*, int*, double*, double*, double*, int*, int*);
 
 static const double PI_HALF = 1.5707963267948966192;
 static const double TWO_PI = 6.2831853071795864769;
@@ -420,7 +420,7 @@ int main(int argc, char* argv[])
     }
     
     N = calloc(nd, sizeof(double));
-    W = calloc(nd*nd, sizeof(double));
+    W = calloc(nd*2, sizeof(double));
     X = calloc(nd*4, sizeof(double));
     if(!N || !W || !X)
         goto err_alloc;
@@ -482,7 +482,7 @@ int main(int argc, char* argv[])
         }
         
         N_ = calloc(nd, sizeof(double));
-        W_ = calloc(nd*nd, sizeof(double));
+        W_ = calloc(nd*2, sizeof(double));
         X_ = calloc(nd*4, sizeof(double));
         if(!N_ || !W_ || !X_)
             perror(NULL), abort();
@@ -606,9 +606,9 @@ int main(int argc, char* argv[])
                         N_[nl] += fl;
                         N_[nh] += fh;
                         
-                        W_[nl*nd+nl] += ww*fl*fl;
-                        W_[nl*nd+nh] += ww*fl*fh;
-                        W_[nh*nd+nh] += ww*fh*fh;
+                        W_[0*nd+nl] += ww*fl*fl;
+                        W_[0*nd+nh] += ww*fh*fh;
+                        W_[1*nd+nl] += ww*fl*fh;
                         
                         X_[0*nd+nl] += ww*fl*xip_re;
                         X_[0*nd+nh] += ww*fh*xip_re;
@@ -632,8 +632,8 @@ int main(int argc, char* argv[])
             {
                 N[n] += N_[n];
                 
-                for(int m = n; m < nd; ++m)
-                    W[n*nd+m] += W_[n*nd+m];
+                W[0*nd+n] += W_[0*nd+n];
+                W[1*nd+n] += W_[1*nd+n];
                 
                 X[0*nd+n] += X_[0*nd+n];
                 X[1*nd+n] += X_[1*nd+n];
@@ -660,10 +660,6 @@ int main(int argc, char* argv[])
     for(int n = 0; n < nd; ++n)
         nn += N[n];
     
-    for(int n = 0; n < nd; ++n)
-        for(int m = 0; m < n; ++m)
-            W[n*nd+m] = W[m*nd+n];
-    
     dt = difftime(time(NULL), st);
     
     if(isatty(fileno(stdin)))
@@ -673,7 +669,7 @@ int main(int argc, char* argv[])
     printf("\n");
     
     if(cfg.matrix)
-        writetxt(cfg.matrix, nd, nd, W);
+        writetxt(cfg.matrix, nd, 2, W);
     if(cfg.rhs)
         writetxt(cfg.rhs, nd, 4, X);
     
@@ -684,7 +680,7 @@ int main(int argc, char* argv[])
         printf("%ssolving normal equations%s\n", bf, nf);
         fflush(stdout);
         
-        dposv_("L", &n, &m, W, &n, X, &n, &err);
+        dptsv_(&n, &m, W, W+n, X, &n, &err);
         
         if(!err)
             printf("%s success\n", sv);
