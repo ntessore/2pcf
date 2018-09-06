@@ -177,7 +177,7 @@ void handler(int s)
 
 int main(int argc, char* argv[])
 {
-    const char* cfgfile;
+    char* cfgfile;
     struct config cfg;
     
     bool xc, ls, sc, tc;
@@ -224,18 +224,31 @@ int main(int argc, char* argv[])
         sv = sx = ">";
     }
     
+    cfgfile = NULL;
+    memset(&cfg, 0, sizeof(cfg));
+    
     if(argc > 5)
         goto err_usage;
     
-    cfgfile = argc > 1 ? argv[1] : "2pcf.cfg";
-    readcfg(cfgfile, &cfg);
+    if(argc > 1)
+    {
+        char** posarg[] = {
+            NULL,
+            &cfgfile,
+            &cfg.catalog1,
+            &cfg.catalog2,
+            &cfg.output
+        };
+        
+        for(int c = 1; c < argc; ++c)
+            if(strcmp(argv[c], "--") != 0)
+                *posarg[c] = strdup(argv[c]);
+    }
     
-    if(argc > 2)
-        free(cfg.catalog1), cfg.catalog1 = copystr(argv[2]);
-    if(argc > 3)
-        free(cfg.catalog2), cfg.catalog2 = copystr(argv[3]);
-    if(argc > 4)
-        free(cfg.output), cfg.output = copystr(argv[4]);
+    if(!cfgfile)
+        cfgfile = strdup("2pcf.cfg");
+    
+    readcfg(cfgfile, &cfg);
     
     xc = cfg.catalog2 != NULL;
     sc = cfg.coords != COORDS_FLAT;
@@ -713,6 +726,7 @@ int main(int argc, char* argv[])
         free(c2);
     free(dx);
     
+    free(cfgfile);
     freecfg(&cfg);
     
     return EXIT_SUCCESS;

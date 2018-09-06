@@ -67,17 +67,6 @@ static int findstr(const char* s, int n, char* v[])
     return i;
 }
 
-static char* copystr(const char* s)
-{
-    char* c = malloc(strlen(s) + 1);
-    if(!c)
-    {
-        perror(NULL);
-        abort();
-    }
-    return strcpy(c, s);
-}
-
 void readcfg(const char* f, struct config* cfg)
 {
     FILE* fp;
@@ -90,8 +79,6 @@ void readcfg(const char* f, struct config* cfg)
     if(!fp)
         goto err_fopen;
     
-    memset(cfg, 0, sizeof(struct config));
-    
     for(l = 1; fgets(buf, sizeof(buf), fp); ++l)
     {
         key = strtok(buf, " \t\r\n");
@@ -103,17 +90,11 @@ void readcfg(const char* f, struct config* cfg)
             goto err_no_value;
         
         if(strcmp(key, "catalog") == 0)
-        {
-            cfg->catalog1 = copystr(val);
-        }
+            cfg->catalog1 = strdup(val);
         else if(strcmp(key, "catalog1") == 0)
-        {
-            cfg->catalog1 = copystr(val);
-        }
+            cfg->catalog1 = strdup(val);
         else if(strcmp(key, "catalog2") == 0)
-        {
-            cfg->catalog2 = copystr(val);
-        }
+            cfg->catalog2 = strdup(val);
         else if(strcmp(key, "dunit") == 0)
         {
             cfg->dunit = findstr(val, NUM_UNIT, CFG_UNIT);
@@ -205,9 +186,7 @@ void readcfg(const char* f, struct config* cfg)
             }
         }
         else if(strcmp(key, "output") == 0)
-        {
-            cfg->output = copystr(val);
-        }
+            cfg->output = strdup(val);
         else if(strcmp(key, "nth") == 0)
         {
             cfg->nth = atoi(val);
