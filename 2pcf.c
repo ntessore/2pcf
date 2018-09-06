@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <math.h>
+#include <complex.h>
 #include <time.h>
 #include <signal.h>
 #include <unistd.h>
@@ -23,54 +24,27 @@ extern void dptsv_(int*, int*, double*, double*, double*, int*, int*);
 static const double PI_HALF = 1.5707963267948966192;
 static const double TWO_PI = 6.2831853071795864769;
 
-static inline void cmul(double x, double y, double u, double v,
-                                                    double* re, double* im)
-{
-    const double k1 = x*(u + v);
-    const double k2 = v*(x + y);
-    const double k3 = u*(y - x);
-    *re = k1 - k2;
-    *im = k1 + k3;
-}
-
 static inline void sincos(double x, double* s, double* c)
 {
     *s = sin(x);
     *c = cos(x);
 }
 
-static inline void nsincos(int n, double x, double y, double* s, double* c)
+static inline double complex phase(int n, double x, double y)
 {
-    double h;
-    
     switch(n)
     {
     case 0:
-        *c = 1;
-        *s = 0;
-        return;
+        return 1;
         
     case 1:
-        h = hypot(x, y);
-        *c = x/h;
-        *s = y/h;
-        return;
+        return (x - I*y)/hypot(x, y);
         
     case 2:
-        h = x*x + y*y;
-        *c = (x*x - y*y)/h;
-        *s = (2*x*y)/h;
-        return;
+        return (x*x - y*y - I*(2*x*y))/(x*x + y*y);
         
     default:
-        h = hypot(x, y);
-        x = x/h;
-        y = y/h;
-        *c = x*x - y*y;
-        *s = 2*x*y;
-        for(int i = 2; i < n; ++i)
-            cmul(x, y, *c, *s, c, s);
-        return;
+        return cpow((x - I*y)/hypot(x, y), n);
     }
 }
 
@@ -585,8 +559,7 @@ int main(int argc, char* argv[])
                     
                     if(D >= Dl && D < Dh)
                     {
-                        double ai, bi, aj, bj;
-                        double xip_re, xip_im, xim_re, xim_im;
+                        double complex zi, zj, xip, xim;
                         
                         double fl, fh, ww;
                         int nl, nh;
@@ -599,26 +572,14 @@ int main(int argc, char* argv[])
                         
                         ww = wi*wj;
                         
-                        // e^{I phi_ij} unnormalised
-                        ai = cyi*syj - syi*cyj*cdx;
-                        bi = -cyj*sdx;
-                        // e^{I S1 phi_ij}
-                        nsincos(S1, ai, bi, &bi, &ai);
-                        // ai + I bi = (ui + I vi) e^{-I S1 phi_ij}
-                        cmul(ui, vi, ai, -bi, &ai, &bi);
+                        zi = ui + I*vi;
+                        zi *= phase(S1, cyi*syj - syi*cyj*cdx, -cyj*sdx);
                         
-                        // e^{I phi_ji} unnormalised
-                        aj = cyj*syi - syj*cyi*cdx;
-                        bj = cyi*sdx;
-                        // e^{I S2 phi_ji}
-                        nsincos(S2, aj, bj, &bj, &aj);
-                        // aj + I bj = (uj + I vj) e^{-I S2 phi_ji}
-                        cmul(uj, vj, aj, -bj, &aj, &bj);
+                        zj = uj + I*vj;
+                        zj *= phase(S2, cyj*syi - syj*cyi*cdx, cyi*sdx);
                         
-                        // xip = (ai + I bi) (aj - I bj)
-                        cmul(ai, bi, aj, -bj, &xip_re, &xip_im);
-                        // xim = (ai + I bi) (aj + I bj)
-                        cmul(ai, bi, aj, bj, &xim_re, &xim_im);
+                        xip = zi*conj(zj);
+                        xim = zi*zj;
                         
                         N_[nl] += fl;
                         N_[nh] += fh;
@@ -627,14 +588,14 @@ int main(int argc, char* argv[])
                         W_[0*nd+nh] += ww*fh*fh;
                         W_[1*nd+nl] += ww*fl*fh;
                         
-                        Y_[0*nd+nl] += ww*fl*xip_re;
-                        Y_[0*nd+nh] += ww*fh*xip_re;
-                        Y_[1*nd+nl] += ww*fl*xim_re;
-                        Y_[1*nd+nh] += ww*fh*xim_re;
-                        Y_[2*nd+nl] += ww*fl*xip_im;
-                        Y_[2*nd+nh] += ww*fh*xip_im;
-                        Y_[3*nd+nl] += ww*fl*xim_im;
-                        Y_[3*nd+nh] += ww*fh*xim_im;
+                        Y_[0*nd+nl] += ww*fl*creal(xip);
+                        Y_[0*nd+nh] += ww*fh*creal(xip);
+                        Y_[1*nd+nl] += ww*fl*creal(xim);
+                        Y_[1*nd+nh] += ww*fh*creal(xim);
+                        Y_[2*nd+nl] += ww*fl*cimag(xip);
+                        Y_[2*nd+nh] += ww*fh*cimag(xip);
+                        Y_[3*nd+nl] += ww*fl*cimag(xim);
+                        Y_[3*nd+nh] += ww*fh*cimag(xim);
                     }
                 }
             }
