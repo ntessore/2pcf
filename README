@@ -1,12 +1,12 @@
-2pcf: fast exact two-point correlation functions
-------------------------------------------------
+2pcf: least squares two-point correlation functions
+---------------------------------------------------
 
-The 2pcf code computes the two-point correlation function for point data and
-real or complex spin-n random fields on the sphere or in the plane. It does so
-using all available pairs of observations, without approximations at small or
-large separations.
+The 2pcf code computes a least squares estimate of the two-point correlation
+function for real or complex spin-n random fields on the sphere or in the
+plane. It does so using all available pairs of observations, without
+approximations at small or large separations.
 
-The code is controlled via a configuration file, and examples are provided.
+The code is controlled via a configuration file. An example is provided.
 
 Compiler options can be customised using the `local.mk` include file for make.
 Support for OpenMP can be enabled there, or by building with `make OPENMP=1`.
