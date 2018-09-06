@@ -47,8 +47,6 @@ struct config {
     int signs1;
     int signs2;
     char* output;
-    char* matrix;
-    char* rhs;
     int nth;
     double thmin;
     double thmax;
@@ -210,14 +208,6 @@ void readcfg(const char* f, struct config* cfg)
         {
             cfg->output = copystr(val);
         }
-        else if(strcmp(key, "matrix") == 0)
-        {
-            cfg->matrix = copystr(val);
-        }
-        else if(strcmp(key, "rhs") == 0)
-        {
-            cfg->rhs = copystr(val);
-        }
         else if(strcmp(key, "nth") == 0)
         {
             cfg->nth = atoi(val);
@@ -332,8 +322,6 @@ void freecfg(struct config* cfg)
     free(cfg->catalog1);
     free(cfg->catalog2);
     free(cfg->output);
-    free(cfg->matrix);
-    free(cfg->rhs);
 }
 
 void printcfg(const struct config* cfg)
@@ -385,10 +373,6 @@ void printcfg(const struct config* cfg)
     }
     printf("\n");
     printf("output file ..... %s\n", cfg->output);
-    if(cfg->matrix)
-        printf("matrix file ..... %s\n", cfg->matrix);
-    if(cfg->rhs)
-        printf("r.h.s. file ..... %s\n", cfg->rhs);
     printf("num. points ..... %u\n", cfg->nth);
     printf("point range ..... %lg to %lg %s\n", cfg->thmin, cfg->thmax,
                                                     PRN_UNIT[cfg->thunit]);
@@ -519,8 +503,8 @@ err_alloc:
     exit(EXIT_FAILURE);
 }
 
-void writexi(const char* f, size_t n, double a, double b, double u,
-                                    bool sc, bool ls, double* N, double* X)
+void output(const char* f, size_t n, double a, double b, double u,
+                bool sc, bool ls, double* N, double* X, double* W, double* Y)
 {
     FILE* fp;
     size_t i;
@@ -542,6 +526,12 @@ void writexi(const char* f, size_t n, double a, double b, double u,
     fprintf(fp, "  %-24s", "xip_im");
     fprintf(fp, "  %-24s", "xim_im");
     fprintf(fp, "  %-24s", "np");
+    fprintf(fp, "  %-24s", "mat_dia");
+    fprintf(fp, "  %-24s", "mat_sub");
+    fprintf(fp, "  %-24s", "rhs_p");
+    fprintf(fp, "  %-24s", "rhs_m");
+    fprintf(fp, "  %-24s", "rhs_p_im");
+    fprintf(fp, "  %-24s", "rhs_m_im");
     fprintf(fp, "\n");
     
     for(i = 0; i < n; ++i)
@@ -563,37 +553,14 @@ void writexi(const char* f, size_t n, double a, double b, double u,
         
         fprintf(fp, " % .18e", N[i]);
         
-        fprintf(fp, "\n");
-    }
-    
-    if(fp != stdout)
-        fclose(fp);
-    
-    return;
-    
-err_fopen:
-    perror(f);
-    exit(EXIT_FAILURE);
-}
-
-void writetxt(const char* f, int n, int m, double* u)
-{
-    FILE* fp;
-    int i, j;
-    
-    if(strcmp(f, "-") == 0)
-        fp = stdout;
-    else
-    {
-        fp = fopen(f, "w");
-        if(!fp)
-            goto err_fopen;
-    }
-    
-    for(i = 0; i < n; ++i)
-    {
-        for(j = 0; j < m; ++j)
-            fprintf(fp, " % .18e", u[j*n+i]);
+        fprintf(fp, " % .18e", W[0*n+i]);
+        fprintf(fp, " % .18e", W[1*n+i]);
+        
+        fprintf(fp, " % .18e", Y[0*n+i]);
+        fprintf(fp, " % .18e", Y[1*n+i]);
+        fprintf(fp, " % .18e", Y[2*n+i]);
+        fprintf(fp, " % .18e", Y[3*n+i]);
+        
         fprintf(fp, "\n");
     }
     

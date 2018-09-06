@@ -199,6 +199,8 @@ int main(int argc, char* argv[])
     
     double* N;
     double* W;
+    double* Y;
+    double* A;
     double* X;
     
     time_t st;
@@ -222,7 +224,7 @@ int main(int argc, char* argv[])
         sv = sx = ">";
     }
     
-    if(argc > 4)
+    if(argc > 5)
         goto err_usage;
     
     cfgfile = argc > 1 ? argv[1] : "2pcf.cfg";
@@ -232,6 +234,8 @@ int main(int argc, char* argv[])
         free(cfg.catalog1), cfg.catalog1 = copystr(argv[2]);
     if(argc > 3)
         free(cfg.catalog2), cfg.catalog2 = copystr(argv[3]);
+    if(argc > 4)
+        free(cfg.output), cfg.output = copystr(argv[4]);
     
     xc = cfg.catalog2 != NULL;
     sc = cfg.coords != COORDS_FLAT;
@@ -421,8 +425,8 @@ int main(int argc, char* argv[])
     
     N = calloc(nd, sizeof(double));
     W = calloc(nd*2, sizeof(double));
-    X = calloc(nd*4, sizeof(double));
-    if(!N || !W || !X)
+    Y = calloc(nd*4, sizeof(double));
+    if(!N || !W || !Y)
         goto err_alloc;
     
     signal(SIGALRM, handler);
@@ -435,7 +439,7 @@ int main(int argc, char* argv[])
     st = time(NULL);
     dt = 0;
     
-    #pragma omp parallel default(none) shared(st, dt, N, W, X, AL, QQ) \
+    #pragma omp parallel default(none) shared(st, dt, N, W, Y, AL, QQ) \
         private(i, j) firstprivate(xc, ls, sc, tc, nd, Dl, Dh, D0, Dm, ng, \
             gw, gh, dx, dy, n1, n2, c1, c2, ma, S1, S2, ANIM, NANIM, stdout)
     {
@@ -449,7 +453,7 @@ int main(int argc, char* argv[])
         
         double* N_;
         double* W_;
-        double* X_;
+        double* Y_;
         
         bool fb;
         
@@ -483,8 +487,8 @@ int main(int argc, char* argv[])
         
         N_ = calloc(nd, sizeof(double));
         W_ = calloc(nd*2, sizeof(double));
-        X_ = calloc(nd*4, sizeof(double));
-        if(!N_ || !W_ || !X_)
+        Y_ = calloc(nd*4, sizeof(double));
+        if(!N_ || !W_ || !Y_)
             perror(NULL), abort();
         
         fb = false;
@@ -610,17 +614,14 @@ int main(int argc, char* argv[])
                         W_[0*nd+nh] += ww*fh*fh;
                         W_[1*nd+nl] += ww*fl*fh;
                         
-                        X_[0*nd+nl] += ww*fl*xip_re;
-                        X_[0*nd+nh] += ww*fh*xip_re;
-                        
-                        X_[1*nd+nl] += ww*fl*xim_re;
-                        X_[1*nd+nh] += ww*fh*xim_re;
-                        
-                        X_[2*nd+nl] += ww*fl*xip_im;
-                        X_[2*nd+nh] += ww*fh*xip_im;
-                        
-                        X_[3*nd+nl] += ww*fl*xim_im;
-                        X_[3*nd+nh] += ww*fh*xim_im;
+                        Y_[0*nd+nl] += ww*fl*xip_re;
+                        Y_[0*nd+nh] += ww*fh*xip_re;
+                        Y_[1*nd+nl] += ww*fl*xim_re;
+                        Y_[1*nd+nh] += ww*fh*xim_re;
+                        Y_[2*nd+nl] += ww*fl*xip_im;
+                        Y_[2*nd+nh] += ww*fh*xip_im;
+                        Y_[3*nd+nl] += ww*fl*xim_im;
+                        Y_[3*nd+nh] += ww*fh*xim_im;
                     }
                 }
             }
@@ -635,17 +636,17 @@ int main(int argc, char* argv[])
                 W[0*nd+n] += W_[0*nd+n];
                 W[1*nd+n] += W_[1*nd+n];
                 
-                X[0*nd+n] += X_[0*nd+n];
-                X[1*nd+n] += X_[1*nd+n];
-                X[2*nd+n] += X_[2*nd+n];
-                X[3*nd+n] += X_[3*nd+n];
+                Y[0*nd+n] += Y_[0*nd+n];
+                Y[1*nd+n] += Y_[1*nd+n];
+                Y[2*nd+n] += Y_[2*nd+n];
+                Y[3*nd+n] += Y_[3*nd+n];
             }
         }
         
         free(qr);
         free(N_);
         free(W_);
-        free(X_);
+        free(Y_);
         
         if(tc)
         {
@@ -668,19 +669,22 @@ int main(int argc, char* argv[])
     printf(" in %02d:%02d:%02d  \n", dt/3600, (dt/60)%60, dt%60);
     printf("\n");
     
-    if(cfg.matrix)
-        writetxt(cfg.matrix, nd, 2, W);
-    if(cfg.rhs)
-        writetxt(cfg.rhs, nd, 4, X);
+    A = calloc(nd*2, sizeof(double));
+    X = calloc(nd*4, sizeof(double));
+    if(!A || !X)
+        goto err_alloc;
     
-    // solve A.X = B
+    memcpy(A, W, nd*2*sizeof(double));
+    memcpy(X, Y, nd*4*sizeof(double));
+    
+    // solve A.X = Y
     {
         int n = nd, m = 4, err;
         
         printf("%ssolving normal equations%s\n", bf, nf);
         fflush(stdout);
         
-        dptsv_(&n, &m, W, W+n, X, &n, &err);
+        dptsv_(&n, &m, A, A+n, X, &n, &err);
         
         if(!err)
             printf("%s success\n", sv);
@@ -696,10 +700,12 @@ int main(int argc, char* argv[])
         printf("\n");
     }
     
-    writexi(cfg.output, nd, Dl, Dh, uo, sc, ls, N, X);
+    output(cfg.output, nd, Dl, Dh, uo, sc, ls, N, X, W, Y);
     
     free(N);
     free(W);
+    free(Y);
+    free(A);
     free(X);
     free(ma);
     free(c1);
@@ -712,7 +718,7 @@ int main(int argc, char* argv[])
     return EXIT_SUCCESS;
     
 err_usage:
-    fprintf(stderr, "usage: 2pcf [config] [catalog] [catalog2]\n");
+    fprintf(stderr, "usage: 2pcf [config] [catalog] [catalog2] [output]\n");
     return EXIT_FAILURE;
     
 err_alloc:
