@@ -254,7 +254,7 @@ int main(int argc, char* argv[])
     S1 = cfg.spin1;
     S2 = cfg.spin2;
     
-    printf("%sreading catalog%s%s\n", bf, xc ? " 1" : "", nf);
+    printf("%sread catalog%s%s\n", bf, xc ? " 1" : "", nf);
     fflush(stdout);
     
     c1 = readc(cfg.catalog1, cfg.coords, ui, cfg.field1, cfg.signs1, &n1);
@@ -264,7 +264,7 @@ int main(int argc, char* argv[])
     
     if(xc)
     {
-        printf("%sreading catalog 2%s\n", bf, nf);
+        printf("%sread catalog 2%s\n", bf, nf);
         fflush(stdout);
         
         c2 = readc(cfg.catalog2, cfg.coords, ui, cfg.field2, cfg.signs2, &n2);
@@ -279,7 +279,7 @@ int main(int argc, char* argv[])
         S2 = S1;
     }
     
-    printf("%sbuilding index%s\n", bf, nf);
+    printf("%sbuild index%s\n", bf, nf);
     fflush(stdout);
     
     gs = 0.25*dh;
@@ -354,7 +354,7 @@ int main(int argc, char* argv[])
     signal(SIGQUIT, handler);
     AL = QQ = 0;
     
-    printf("%scalculating correlations%s\n", bf, nf);
+    printf("%scorrelations%s\n", bf, nf);
     fflush(stdout);
     
     st = time(NULL);
@@ -581,7 +581,7 @@ int main(int argc, char* argv[])
     {
         int n = nd, m = 4, err;
         
-        printf("%ssolving normal equations%s\n", bf, nf);
+        printf("%sleast squares%s\n", bf, nf);
         fflush(stdout);
         
         dptsv_(&n, &m, A, A+n, X, &n, &err);
