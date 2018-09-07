@@ -24,10 +24,25 @@ extern void dptsv_(int*, int*, double*, double*, double*, int*, int*);
 static const double PI_HALF = 1.5707963267948966192;
 static const double TWO_PI = 6.2831853071795864769;
 
-static inline void sincos(double x, double* s, double* c)
+static inline void vec(bool sc, double x, double y, double v[])
 {
-    *s = sin(x);
-    *c = cos(x);
+    if(sc)
+    {
+        const double sx = sin(x);
+        const double cx = cos(x);
+        const double sy = sin(y);
+        const double cy = cos(y);
+        
+        v[0] = cx*cy;
+        v[1] = sx*cy;
+        v[2] = sy;
+    }
+    else
+    {
+        v[0] = 1;
+        v[1] = x;
+        v[2] = y;
+    }
 }
 
 static inline double complex phase(int n, double x, double y)
@@ -251,15 +266,16 @@ int main(int argc, char* argv[])
     
     sdh = sin(dh);
     
-    Dl = dl;
-    Dh = dh;
     if(sc)
     {
-        Dl = 2*sin(0.5*Dl);
-        Dh = 2*sin(0.5*Dh);
+        Dl = 2*sin(0.5*dl);
+        Dh = 2*sin(0.5*dh);
     }
-    Dl = Dl*Dl;
-    Dh = Dh*Dh;
+    else
+    {
+        Dl = dl;
+        Dh = dh;
+    }
     
     if(ls)
     {
@@ -393,21 +409,12 @@ int main(int argc, char* argv[])
     printf("%s done with %zu x %zu grid cells\n", sv, gw, gh);
     printf("\n");
     
-    if(sc)
+    for(i = 0; i < n1; ++i)
+        vec(sc, c1[i*DW+0], c1[i*DW+1], &c1[i*DW+0]);
+    if(xc)
     {
-        for(i = 0; i < n1; ++i)
-        {
-            sincos(c1[i*DW+0], &c1[i*DW+0], &c1[i*DW+2]);
-            sincos(c1[i*DW+1], &c1[i*DW+1], &c1[i*DW+3]);
-        }
-        if(xc)
-        {
-            for(i = 0; i < n2; ++i)
-            {
-                sincos(c2[i*DW+0], &c2[i*DW+0], &c2[i*DW+2]);
-                sincos(c2[i*DW+1], &c2[i*DW+1], &c2[i*DW+3]);
-            }
-        }
+        for(i = 0; i < n2; ++i)
+            vec(sc, c2[i*DW+0], c2[i*DW+1], &c2[i*DW+0]);
     }
     
     N = calloc(nd, sizeof(double));
@@ -498,14 +505,13 @@ int main(int argc, char* argv[])
         #pragma omp for schedule(static, 1) nowait
         for(i = 0; i < n1; ++i)
         {
-            const double sxi = c1_[i*DW+0];
-            const double syi = c1_[i*DW+1];
-            const double cxi = c1_[i*DW+2];
-            const double cyi = c1_[i*DW+3];
-            const double ui  = c1_[i*DW+4];
-            const double vi  = c1_[i*DW+5];
-            const double wi  = c1_[i*DW+6];
-            const size_t qi  = c1_[i*DW+7];
+            const double xi = c1_[i*DW+0];
+            const double yi = c1_[i*DW+1];
+            const double zi = c1_[i*DW+2];
+            const double ui = c1_[i*DW+4];
+            const double vi = c1_[i*DW+5];
+            const double wi = c1_[i*DW+6];
+            const size_t qi = c1_[i*DW+7];
             
             if(QQ)
                 continue;
@@ -540,29 +546,27 @@ int main(int argc, char* argv[])
                 
                 for(; j < jh; ++j)
                 {
-                    const double sxj = c2_[j*DW+0];
-                    const double syj = c2_[j*DW+1];
-                    const double cxj = c2_[j*DW+2];
-                    const double cyj = c2_[j*DW+3];
-                    const double uj  = c2_[j*DW+4];
-                    const double vj  = c2_[j*DW+5];
-                    const double wj  = c2_[j*DW+6];
+                    const double xj = c2_[j*DW+0];
+                    const double yj = c2_[j*DW+1];
+                    const double zj = c2_[j*DW+2];
+                    const double uj = c2_[j*DW+4];
+                    const double vj = c2_[j*DW+5];
+                    const double wj = c2_[j*DW+6];
                     
-                    const double sdx = cxi*sxj - sxi*cxj;
-                    const double cdx = cxi*cxj + sc*sxi*sxj;
+                    const double dx = xi - xj;
+                    const double dy = yi - yj;
+                    const double dz = zi - zj;
                     
-                    const double D1 = cdx*cyi - cyj;
-                    const double D2 = sdx*cyi;
-                    const double D3 = syj - syi;
-                    
-                    const double D = D1*D1 + D2*D2 + D3*D3;
+                    const double D = sqrt(dx*dx + dy*dy + dz*dz);
                     
                     if(D >= Dl && D < Dh)
                     {
-                        double complex zi, zj, xip, xim;
+                        double complex gi, gj, xip, xim;
                         
                         double fl, fh, ww;
                         int nl, nh;
+                        
+                        const double cc = xi*xj + sc*(yi*yj+zi*zj);
                         
                         fl = Dm*((ls ? log(D) : D) - D0);
                         nl = floor(fl);
@@ -572,14 +576,14 @@ int main(int argc, char* argv[])
                         
                         ww = wi*wj;
                         
-                        zi = ui + I*vi;
-                        zi *= phase(S1, cyi*syj - syi*cyj*cdx, -cyj*sdx);
+                        gi = ui + I*vi;
+                        gi *= phase(S1, zj - zi*cc, xj*yi - xi*yj);
                         
-                        zj = uj + I*vj;
-                        zj *= phase(S2, cyj*syi - syj*cyi*cdx, cyi*sdx);
+                        gj = uj + I*vj;
+                        gj *= phase(S2, zi - zj*cc, xi*yj - xj*yi);
                         
-                        xip = zi*conj(zj);
-                        xim = zi*zj;
+                        xip = gi*conj(gj);
+                        xim = gi*gj;
                         
                         N_[nl] += fl;
                         N_[nh] += fh;

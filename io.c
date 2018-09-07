@@ -519,7 +519,7 @@ void output(const char* f, size_t n, double a, double b, double u,
             d = exp(log(a) + i*(log(b) - log(a))/(n - 1));
         else
             d = a + i*(b - a)/(n - 1);
-        d = sqrt(d);
+        
         if(sc)
             d = 2*asin(0.5*d);
         
