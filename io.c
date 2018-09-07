@@ -52,8 +52,6 @@ struct config {
     double thmax;
     int thunit;
     int spacing;
-    double gridx;
-    double gridy;
     int num_threads;
     int thread_data;
 };
@@ -217,18 +215,6 @@ void readcfg(const char* f, struct config* cfg)
             if(cfg->spacing == NUM_SPACING)
                 goto err_bad_value;
         }
-        else if(strcmp(key, "gridx") == 0)
-        {
-            cfg->gridx = atof(val);
-            if(cfg->gridx <= 0)
-                goto err_bad_value;
-        }
-        else if(strcmp(key, "gridy") == 0)
-        {
-            cfg->gridy = atof(val);
-            if(cfg->gridy <= 0)
-                goto err_bad_value;
-        }
         else if(strcmp(key, "num_threads") == 0)
         {
             cfg->num_threads = atoi(val);
@@ -257,21 +243,6 @@ void readcfg(const char* f, struct config* cfg)
         { key = "thmin"; goto err_missing_key; }
     if(!cfg->thmax)
         { key = "thmax"; goto err_missing_key; }
-    
-    if(!cfg->gridx)
-    {
-        if(cfg->coords == COORDS_FLAT)
-            cfg->gridx = cfg->thmax/2;
-        else
-            cfg->gridx = 0.1*UCONV[UNIT_DEG]/UCONV[cfg->thunit];
-    }
-    if(!cfg->gridy)
-    {
-        if(cfg->coords == COORDS_FLAT)
-            cfg->gridy = cfg->thmax/2;
-        else
-            cfg->gridy = 0.1*UCONV[UNIT_DEG]/UCONV[cfg->thunit];
-    }
     
     return;
     
@@ -356,9 +327,6 @@ void printcfg(const struct config* cfg)
     printf("point range ..... %lg to %lg %s\n", cfg->thmin, cfg->thmax,
                                                     PRN_UNIT[cfg->thunit]);
     printf("point spacing ... %s\n", PRN_SPACING[cfg->spacing]);
-    printf("\n");
-    printf("grid size ....... %g x %g %s^2\n", cfg->gridx, cfg->gridy,
-                                                    PRN_UNIT[cfg->thunit]);
 #ifdef _OPENMP
     printf("\n");
     printf("num. threads .... %d\n", omp_get_max_threads());
@@ -366,12 +334,12 @@ void printcfg(const struct config* cfg)
 #endif
 }
 
-double* readc(const char* f, double ui, bool cf, int sg, size_t* n)
+double* readc(const char* f, int co, double ui, bool cf, int sg, int* n)
 {
     FILE* fp;
     int l;
     char buf[LINELEN];
-    size_t i, a;
+    int i, a;
     double* d;
     char* sx;
     char* sy;
@@ -442,13 +410,23 @@ double* readc(const char* f, double ui, bool cf, int sg, size_t* n)
         else
             w = atof(sw);
         
-        d[i*DW+0] = x;
-        d[i*DW+1] = y;
-        d[i*DW+2] = 1;
-        d[i*DW+3] = 1;
-        d[i*DW+4] = sg&2 ? -u : u;
-        d[i*DW+5] = sg&1 ? -v : v;
-        d[i*DW+6] = w;
+        switch(co)
+        {
+        case COORDS_FLAT:
+            d[i*DW+0] = 1;
+            d[i*DW+1] = x;
+            d[i*DW+2] = y;
+            break;
+        case COORDS_LONLAT:
+            d[i*DW+0] = cos(x)*cos(y);
+            d[i*DW+1] = sin(x)*cos(y);
+            d[i*DW+2] = sin(y);
+            break;
+        }
+        
+        d[i*DW+3] = sg&2 ? -u : u;
+        d[i*DW+4] = sg&1 ? -v : v;
+        d[i*DW+5] = w;
         
         i += 1;
         

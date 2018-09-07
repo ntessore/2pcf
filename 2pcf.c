@@ -21,30 +21,6 @@
 // LAPACK
 extern void dptsv_(int*, int*, double*, double*, double*, int*, int*);
 
-static const double PI_HALF = 1.5707963267948966192;
-static const double TWO_PI = 6.2831853071795864769;
-
-static inline void vec(bool sc, double x, double y, double v[])
-{
-    if(sc)
-    {
-        const double sx = sin(x);
-        const double cx = cos(x);
-        const double sy = sin(y);
-        const double cy = cos(y);
-        
-        v[0] = cx*cy;
-        v[1] = sx*cy;
-        v[2] = sy;
-    }
-    else
-    {
-        v[0] = 1;
-        v[1] = x;
-        v[2] = y;
-    }
-}
-
 static inline double complex phase(int n, double x, double y)
 {
     switch(n)
@@ -75,6 +51,14 @@ int mapsort(const void* a, const void* b)
     if(x[7] > y[7])
         return +1;
     
+    if(x[2] < y[2])
+        return -1;
+    if(x[2] > y[2])
+        return +1;
+    if(x[1] < y[1])
+        return -1;
+    if(x[1] > y[1])
+        return +1;
     if(x[0] < y[0])
         return -1;
     if(x[0] > y[0])
@@ -83,66 +67,50 @@ int mapsort(const void* a, const void* b)
     return 0;
 }
 
-static inline int index(double x, double y, double dx, double dy, int w)
+static inline int index(double x, double y, double z, double s, int w, int h)
 {
-    return (int)(y/dy)*w + (int)(x/dx);
+    return (int)(z/s)*(w*h) + (int)(y/s)*w + (int)(x/s);
 }
 
-static inline void query(int k, int w, int h, int dy, const int dx[],
-                                                        int* qc, int qv[])
+static inline int query(int q, const int ma[], int gx, int gy, int gz,
+                                                    int gr, int* c, int v[])
 {
-    const int i0 = k/w;
-    const int il = i0 > dy ? i0-dy : 0;
-    const int ih = i0+dy < h ? i0+dy+1 : h;
+    int i, il, ih, j, jl, jh, k, kl, kh, l, m, n, p;
     
-    const int j = k%w;
+    i = q/(gx*gy);
+    j = (q/gx)%gy;
+    k = q%gx;
     
-    int n = 0, qq = -1;
+    il = i > gr ? i-gr : 0;
+    ih = i+gr < gz ? i+gr+1 : gz;
     
-    for(int i = il; i < ih; ++i)
+    jl = j > gr ? j-gr : 0;
+    jh = j+gr < gy ? j+gr+1 : gy;
+    
+    kl = k > gr ? k-gr : 0;
+    kh = k+gr < gx ? k+gr+1 : gx;
+    
+    n = 0;
+    p = -1;
+    
+    for(i = il; i < ih; ++i)
     {
-        const int di = dx[i];
-        if(di < 0)
+        for(j = jl; j < jh; ++j)
         {
-            const int q0 = i*w;
-            const int qw = q0 + w;
-            const int ql = q0 + (j+w+di)%w;
-            const int qh = q0 + (j-di+1)%w;
+            k = (i*gy + j)*gx;
+            l = ma[k + kl];
+            m = ma[k + kh];
             
-            if(ql < qh)
-            {
-                if(ql == qq)
-                    qq = (qv[2*n-1] = qh);
-                else
-                    qq = (qv[2*n+0] = ql, qv[2*n+1] = qh), ++n;
-            }
+            if(l == p)
+                p = (v[2*n-1] = m);
             else
-            {
-                if(q0 == qq)
-                    qq = (qv[2*n-1] = qh);
-                else
-                    qq = (qv[2*n+0] = q0, qv[2*n+1] = qh), ++n;
-                
-                if(ql == qq)
-                    qq = (qv[2*n-1] = qw);
-                else
-                    qq = (qv[2*n+0] = ql, qv[2*n+1] = qw), ++n;
-            }
-        }
-        else
-        {
-            const int q0 = i*w;
-            const int ql = q0 + (j > di ? j-di : 0);
-            const int qh = q0 + (j+di < w ? j+di+1 : w);
-            
-            if(ql == qq)
-                qq = (qv[2*n-1] = qh);
-            else
-                qq = (qv[2*n+0] = ql, qv[2*n+1] = qh), ++n;
+                p = (v[2*n+0] = l, v[2*n+1] = m), ++n;
         }
     }
     
-    *qc = n;
+    *c = n;
+    
+    return q;
 }
 
 #include "io.c" // yes, really
@@ -171,19 +139,18 @@ int main(int argc, char* argv[])
     
     bool xc, ls, sc, tc;
     int nd;
-    double dl, dh, sdh, Dl, Dh, D0, Dm;
+    double dl, dh, Dl, Dh, D0, Dm;
     double ui, uo;
     int S1, S2;
     
-    size_t n1, n2;
+    int n1, n2;
     double* c1;
     double* c2;
     
-    double xl, xh, yl, yh;
-    size_t gw, gh, ng;
-    double gx, gy;
-    int dy;
-    int* dx;
+    double gs;
+    int gr;
+    double xl, xh, yl, yh, zl, zh;
+    int gx, gy, gz, ng;
     int* ma;
     
     double* N;
@@ -196,7 +163,7 @@ int main(int argc, char* argv[])
     int dt;
     double nn;
     
-    size_t i, j;
+    int i, j;
     
     char* bf, *nf, *sv, *sx;
     
@@ -264,8 +231,6 @@ int main(int argc, char* argv[])
     dl = cfg.thmin*uo;
     dh = cfg.thmax*uo;
     
-    sdh = sin(dh);
-    
     if(sc)
     {
         Dl = 2*sin(0.5*dl);
@@ -294,9 +259,9 @@ int main(int argc, char* argv[])
     printf("%sreading catalog%s%s\n", bf, xc ? " 1" : "", nf);
     fflush(stdout);
     
-    c1 = readc(cfg.catalog1, ui, cfg.field1, cfg.signs1, &n1);
+    c1 = readc(cfg.catalog1, cfg.coords, ui, cfg.field1, cfg.signs1, &n1);
     
-    printf("%s done with %zu points\n", sv, n1);
+    printf("%s done with %d points\n", sv, n1);
     printf("\n");
     
     if(xc)
@@ -304,9 +269,9 @@ int main(int argc, char* argv[])
         printf("%sreading catalog 2%s\n", bf, nf);
         fflush(stdout);
         
-        c2 = readc(cfg.catalog2, ui, cfg.field2, cfg.signs2, &n2);
+        c2 = readc(cfg.catalog2, cfg.coords, ui, cfg.field2, cfg.signs2, &n2);
         
-        printf("%s done with %zu points\n", sv, n2);
+        printf("%s done with %d points\n", sv, n2);
         printf("\n");
     }
     else
@@ -319,78 +284,50 @@ int main(int argc, char* argv[])
     printf("%sbuilding index%s\n", bf, nf);
     fflush(stdout);
     
-    gx = cfg.gridx*uo;
-    gy = cfg.gridy*uo;
+    gs = 0.25*Dh;
+    gr = ceil(Dh/gs);
     
-    if(sc)
+    xl = xh = c1[0];
+    yl = yh = c1[1];
+    zl = zh = c1[2];
+    for(i = 1; i < n1; ++i)
     {
-        xl = 0;
-        xh = TWO_PI;
-        yl = -PI_HALF;
-        yh = +PI_HALF;
-        
-        gw = (int)(fmax(1, floor((xh - xl)/gx))) | 1;
-        gh = fmax(1, floor((yh - yl)/gy));
-        
-        gx = (xh - xl)/gw;
-        gy = (yh - yl)/gh;
+        if(c1[i*DW+0] < xl) xl = c1[i*DW+0];
+        if(c1[i*DW+0] > xh) xh = c1[i*DW+0];
+        if(c1[i*DW+1] < yl) yl = c1[i*DW+1];
+        if(c1[i*DW+1] > yh) yh = c1[i*DW+1];
+        if(c1[i*DW+2] < zl) zl = c1[i*DW+2];
+        if(c1[i*DW+2] > zh) zh = c1[i*DW+2];
     }
-    else
+    if(xc)
     {
-        xl = xh = c1[0];
-        yl = yh = c1[1];
-        for(i = 1; i < n1; ++i)
+        for(i = 0; i < n2; ++i)
         {
-            if(c1[i*DW+0] < xl) xl = c1[i*DW+0];
-            if(c1[i*DW+0] > xh) xh = c1[i*DW+0];
-            if(c1[i*DW+1] < yl) yl = c1[i*DW+1];
-            if(c1[i*DW+1] > yh) yh = c1[i*DW+1];
-        }
-        if(xc)
-        {
-            for(i = 0; i < n2; ++i)
-            {
-                if(c2[i*DW+0] < xl) xl = c2[i*DW+0];
-                if(c2[i*DW+0] > xh) xh = c2[i*DW+0];
-                if(c2[i*DW+1] < yl) yl = c2[i*DW+1];
-                if(c2[i*DW+1] > yh) yh = c2[i*DW+1];
-            }
-        }
-        
-        gw = floor((xh - xl)/gx) + 1;
-        gh = floor((yh - yl)/gy) + 1;
-    }
-    
-    ng = gw*gh;
-    
-    dy = ceil(dh/gy);
-    dx = malloc(gh*sizeof(int));
-    if(!dx)
-        goto err_alloc;
-    
-    if(sc)
-    {
-        for(i = 0; i < gh; ++i)
-        {
-            const double cy = fmin(cos(yl + i*gy), cos(yl + (i+1)*gy));
-            const int di = sdh > cy ? gw/2 : ceil(asin(sdh/cy)/gx);
-            dx[i] = -di;
+            if(c2[i*DW+0] < xl) xl = c2[i*DW+0];
+            if(c2[i*DW+0] > xh) xh = c2[i*DW+0];
+            if(c2[i*DW+1] < yl) yl = c2[i*DW+1];
+            if(c2[i*DW+1] > yh) yh = c2[i*DW+1];
+            if(c2[i*DW+2] < zl) zl = c2[i*DW+2];
+            if(c2[i*DW+2] > zh) zh = c2[i*DW+2];
         }
     }
-    else
-    {
-        for(i = 0; i < gh; ++i)
-            dx[i] = ceil(dh/gx);
-    }
+    
+    gx = floor((xh - xl)/gs) + 1;
+    gy = floor((yh - yl)/gs) + 1;
+    gz = floor((zh - zl)/gs) + 1;
+    
+    ng = gx*gy*gz;
     
     for(i = 0; i < n1; ++i)
-        c1[i*DW+7] = index(c1[i*DW+0] - xl, c1[i*DW+1] - yl, gx, gy, gw);
+        c1[i*DW+7] =
+            index(c1[i*DW+0]-xl, c1[i*DW+1]-yl, c1[i*DW+2]-zl, gs, gx, gy);
     qsort(c1, n1, DW*sizeof(double), mapsort);
     
     if(xc)
     {
         for(i = 0; i < n2; ++i)
-            c2[i*DW+7] = index(c2[i*DW+0] - xl, c2[i*DW+1] - yl, gx, gy, gw);
+            c2[i*DW+7] =
+                index(c2[i*DW+0]-xl, c2[i*DW+1]-yl, c2[i*DW+2]-zl, gs, gx, gy);
         qsort(c2, n2, DW*sizeof(double), mapsort);
     }
     
@@ -406,16 +343,8 @@ int main(int argc, char* argv[])
     }
     ma[ng] = n2;
     
-    printf("%s done with %zu x %zu grid cells\n", sv, gw, gh);
+    printf("%s done with %d x %d x %d grid cells\n", sv, gx, gy, gz);
     printf("\n");
-    
-    for(i = 0; i < n1; ++i)
-        vec(sc, c1[i*DW+0], c1[i*DW+1], &c1[i*DW+0]);
-    if(xc)
-    {
-        for(i = 0; i < n2; ++i)
-            vec(sc, c2[i*DW+0], c2[i*DW+1], &c2[i*DW+0]);
-    }
     
     N = calloc(nd, sizeof(double));
     W = calloc(nd*2, sizeof(double));
@@ -434,10 +363,10 @@ int main(int argc, char* argv[])
     dt = 0;
     
     #pragma omp parallel default(none) shared(st, dt, N, W, Y, AL, QQ) \
-        private(i, j) firstprivate(xc, ls, sc, tc, nd, Dl, Dh, D0, Dm, ng, \
-            gw, gh, dx, dy, n1, n2, c1, c2, ma, S1, S2, ANIM, NANIM, stdout)
+        private(i, j) firstprivate(xc, ls, sc, tc, nd, Dl, Dh, D0, Dm, gr, \
+            gx, gy, gz, ng, n1, n2, c1, c2, ma, S1, S2, ANIM, NANIM, stdout)
     {
-        size_t qc, jh;
+        int qc, jh;
         int q, nq;
         int* qr;
         
@@ -452,7 +381,7 @@ int main(int argc, char* argv[])
         bool fb;
         
         nq = 0;
-        qr = malloc((2*dy+1)*4*sizeof(int));
+        qr = malloc((2*gr+1)*(2*gr+1)*2*sizeof(int));
         if(!qr)
             perror(NULL), abort();
         
@@ -508,10 +437,10 @@ int main(int argc, char* argv[])
             const double xi = c1_[i*DW+0];
             const double yi = c1_[i*DW+1];
             const double zi = c1_[i*DW+2];
-            const double ui = c1_[i*DW+4];
-            const double vi = c1_[i*DW+5];
-            const double wi = c1_[i*DW+6];
-            const size_t qi = c1_[i*DW+7];
+            const double ui = c1_[i*DW+3];
+            const double vi = c1_[i*DW+4];
+            const double wi = c1_[i*DW+5];
+            const int    qi = c1_[i*DW+7];
             
             if(QQ)
                 continue;
@@ -529,12 +458,7 @@ int main(int argc, char* argv[])
             }
             
             if(qi != qc)
-            {
-                qc = qi;
-                query(qi, gw, gh, dy, dx, &nq, qr);
-                for(q = 0; q < 2*nq; ++q)
-                    qr[q] = ma_[qr[q]];
-            }
+                qc = query(qi, ma, gx, gy, gz, gr, &nq, qr);
             
             for(q = 0; q < nq; ++q)
             {
@@ -549,9 +473,9 @@ int main(int argc, char* argv[])
                     const double xj = c2_[j*DW+0];
                     const double yj = c2_[j*DW+1];
                     const double zj = c2_[j*DW+2];
-                    const double uj = c2_[j*DW+4];
-                    const double vj = c2_[j*DW+5];
-                    const double wj = c2_[j*DW+6];
+                    const double uj = c2_[j*DW+3];
+                    const double vj = c2_[j*DW+4];
+                    const double wj = c2_[j*DW+5];
                     
                     const double dx = xi - xj;
                     const double dy = yi - yj;
@@ -689,7 +613,6 @@ int main(int argc, char* argv[])
     free(c1);
     if(xc)
         free(c2);
-    free(dx);
     
     free(cfgfile);
     freecfg(&cfg);
