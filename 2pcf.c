@@ -139,7 +139,7 @@ int main(int argc, char* argv[])
     
     bool xc, ls, sc, tc;
     int nd;
-    double dl, dh, Dl, Dh, D0, Dm;
+    double dl, dh, d0, dm, Dl, Dh;
     double ui, uo;
     int S1, S2;
     
@@ -233,25 +233,23 @@ int main(int argc, char* argv[])
     
     if(sc)
     {
-        Dl = 2*sin(0.5*dl);
-        Dh = 2*sin(0.5*dh);
-    }
-    else
-    {
-        Dl = dl;
-        Dh = dh;
+        dl = 2*sin(0.5*dl);
+        dh = 2*sin(0.5*dh);
     }
     
     if(ls)
     {
-        D0 = log(Dl);
-        Dm = (nd - 1)/(log(Dh) - D0);
+        d0 = log(dl);
+        dm = (nd - 1)/(log(dh) - d0);
     }
     else
     {
-        D0 = Dl;
-        Dm = (nd - 1)/(Dh - D0);
+        d0 = dl;
+        dm = (nd - 1)/(dh - d0);
     }
+    
+    Dl = dl*dl;
+    Dh = dh*dh;
     
     S1 = cfg.spin1;
     S2 = cfg.spin2;
@@ -284,8 +282,8 @@ int main(int argc, char* argv[])
     printf("%sbuilding index%s\n", bf, nf);
     fflush(stdout);
     
-    gs = 0.25*Dh;
-    gr = ceil(Dh/gs);
+    gs = 0.25*dh;
+    gr = ceil(dh/gs);
     
     xl = xh = c1[0];
     yl = yh = c1[1];
@@ -363,7 +361,7 @@ int main(int argc, char* argv[])
     dt = 0;
     
     #pragma omp parallel default(none) shared(st, dt, N, W, Y, AL, QQ) \
-        private(i, j) firstprivate(xc, ls, sc, tc, nd, Dl, Dh, D0, Dm, gr, \
+        private(i, j) firstprivate(xc, ls, sc, tc, nd, d0, dm, Dl, Dh, gr, \
             gx, gy, gz, ng, n1, n2, c1, c2, ma, S1, S2, ANIM, NANIM, stdout)
     {
         int qc, jh;
@@ -481,7 +479,7 @@ int main(int argc, char* argv[])
                     const double dy = yi - yj;
                     const double dz = zi - zj;
                     
-                    const double D = sqrt(dx*dx + dy*dy + dz*dz);
+                    const double D = dx*dx + dy*dy + dz*dz;
                     
                     if(D >= Dl && D < Dh)
                     {
@@ -492,7 +490,7 @@ int main(int argc, char* argv[])
                         
                         const double cc = xi*xj + sc*(yi*yj+zi*zj);
                         
-                        fl = Dm*((ls ? log(D) : D) - D0);
+                        fl = dm*((ls ? 0.5*log(D) : sqrt(D)) - d0);
                         nl = floor(fl);
                         nh = nl + 1;
                         fl = nh - fl;
@@ -602,7 +600,7 @@ int main(int argc, char* argv[])
         printf("\n");
     }
     
-    output(cfg.output, nd, Dl, Dh, uo, sc, ls, N, X, W, Y);
+    output(cfg.output, nd, dl, dh, uo, sc, ls, N, X, W, Y);
     
     free(N);
     free(W);
