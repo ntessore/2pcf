@@ -3,8 +3,9 @@
 
 The 2pcf code computes a least squares estimate of the two-point correlation
 function for real or complex spin-n random fields on the sphere or in the
-plane. It does so using all available pairs of observations, without
-approximations at small or large separations.
+plane, as well as real or complex spin-0 fields in 3D space. It does so using
+all available pairs of observations, without approximations at small or large
+separations.
 
 The code is controlled via a configuration file. An example is provided.
 

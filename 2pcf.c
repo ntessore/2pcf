@@ -206,9 +206,31 @@ int main(int argc, char* argv[])
     
     readcfg(cfgfile, &cfg);
     
+    printf("\n");
+    printf("%sconfiguration file %s%s\n", bf, cfgfile, nf);
+    printf("\n");
+    printcfg(&cfg);
+    printf("\n");
+    
     xc = cfg.catalog2 != NULL;
-    sc = cfg.coords != COORDS_FLAT;
+    sc = cfg.coords >= COORDS_LONLAT;
     ls = cfg.spacing == SPACING_LOG;
+    
+    ui = UCONV[cfg.dunit];
+    uo = UCONV[cfg.thunit];
+    
+    nd = cfg.nth;
+    dl = cfg.thmin*uo;
+    dh = cfg.thmax*uo;
+    
+    S1 = cfg.spin1;
+    S2 = cfg.spin2;
+    
+    if(cfg.coords == COORDS_3D && (S1 != 0 || S2 != 0))
+    {
+        fprintf(stderr, "error: 3D fields must be spin 0\n");
+        return EXIT_FAILURE;
+    }
     
 #ifdef _OPENMP
     if(cfg.num_threads)
@@ -217,19 +239,6 @@ int main(int argc, char* argv[])
 #else
     tc = false;
 #endif
-    
-    printf("\n");
-    printf("%sconfiguration file %s%s\n", bf, cfgfile, nf);
-    printf("\n");
-    printcfg(&cfg);
-    printf("\n");
-    
-    ui = UCONV[cfg.dunit];
-    uo = UCONV[cfg.thunit];
-    
-    nd = cfg.nth;
-    dl = cfg.thmin*uo;
-    dh = cfg.thmax*uo;
     
     if(sc)
     {
@@ -250,9 +259,6 @@ int main(int argc, char* argv[])
     
     Dl = dl*dl;
     Dh = dh*dh;
-    
-    S1 = cfg.spin1;
-    S2 = cfg.spin2;
     
     printf("%sread catalog%s%s\n", bf, xc ? " 1" : "", nf);
     fflush(stdout);

@@ -4,9 +4,9 @@ enum { SPACING_LIN, SPACING_LOG, NUM_SPACING };
 char* CFG_SPACING[] = { "lin", "log" };
 char* PRN_SPACING[] = { "linear", "logarithmic" };
 
-enum { COORDS_FLAT, COORDS_LONLAT, NUM_COORDS };
-char* CFG_COORDS[] = { "flat", "lonlat" };
-char* PRN_COORDS[] = { "flat", "lon, lat" };
+enum { COORDS_FLAT, COORDS_3D, COORDS_LONLAT, NUM_COORDS };
+char* CFG_COORDS[] = { "flat", "3d", "lonlat" };
+char* PRN_COORDS[] = { "flat", "3d", "lon, lat" };
 
 enum { FIELD_REAL, FIELD_COMPLEX, NUM_FIELD };
 char* CFG_FIELD[] = { "real", "complex" };
@@ -341,12 +341,14 @@ double* readc(const char* f, int co, double ui, bool cf, int sg, int* n)
     char buf[LINELEN];
     int i, a;
     double* d;
+    int nd;
     char* sx;
     char* sy;
+    char* sz;
     char* su;
     char* sv;
     char* sw;
-    double x, y, u, v, w;
+    double x, y, z, u, v, w;
     
     if(strcmp(f, "-") == 0)
         fp = stdin;
@@ -364,10 +366,21 @@ double* readc(const char* f, int co, double ui, bool cf, int sg, int* n)
     if(!d)
         goto err_alloc;
     
+    switch(co)
+    {
+    case COORDS_3D:
+        nd = 3;
+        break;
+    default:
+        nd = 2;
+        break;
+    }
+    
     for(l = 1; fgets(buf, sizeof buf, fp); ++l)
     {
         sx = strtok(buf, " \t\r\n");
         sy = strtok(NULL, " \t\r\n");
+        sz = nd == 3 ? strtok(NULL, " \t\r\n") : NULL;
         su = strtok(NULL, " \t\r\n");
         sv = cf ? strtok(NULL, " \t\r\n") : NULL;
         sw = strtok(NULL, " \t\r\n");
@@ -383,6 +396,19 @@ double* readc(const char* f, int co, double ui, bool cf, int sg, int* n)
         
         x = atof(sx)*ui;
         y = atof(sy)*ui;
+        
+        if(nd == 3)
+        {
+            if(!sz || *sz == '#')
+            {
+                fprintf(stderr, "error: %s:%d: missing `z` value\n", f, l);
+                exit(EXIT_FAILURE);
+            }
+            
+            z = atof(sz);
+        }
+        else
+            z = 0;
         
         if(!su || *su == '#')
         {
@@ -416,6 +442,11 @@ double* readc(const char* f, int co, double ui, bool cf, int sg, int* n)
             d[i*DW+0] = 1;
             d[i*DW+1] = x;
             d[i*DW+2] = y;
+            break;
+        case COORDS_3D:
+            d[i*DW+0] = x;
+            d[i*DW+1] = y;
+            d[i*DW+2] = z;
             break;
         case COORDS_LONLAT:
             d[i*DW+0] = cos(x)*cos(y);
