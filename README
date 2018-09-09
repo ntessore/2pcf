@@ -11,3 +11,9 @@ The code is controlled via a configuration file. An example is provided.
 
 Compiler options can be customised using the `local.mk` include file for make.
 Support for OpenMP can be enabled there, or by building with `make OPENMP=1`.
+
+The method of least squares two-point function estimation is described in a
+short research note that can be found
+
+- at RNAAS: https://doi.org/10.3847/2515-5172/aad9a7 ,
+- on arXiv: https://arxiv.org/abs/1808.05552 .
