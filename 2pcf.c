@@ -21,22 +21,15 @@
 // LAPACK
 extern void dptsv_(int*, int*, double*, double*, double*, int*, int*);
 
-static inline double complex phase(int n, double x, double y)
+static inline double complex phase(unsigned n, double x, double y)
 {
-    switch(n)
-    {
-    case 0:
-        return 1;
-        
-    case 1:
-        return (x - I*y)/hypot(x, y);
-        
-    case 2:
-        return (x*x - y*y - I*(2*x*y))/(x*x + y*y);
-        
-    default:
-        return cpow((x - I*y)/hypot(x, y), n);
-    }
+    double complex w = (x + I*y)/(x - I*y);
+    double complex z = 1;
+    for(; n > 1; n -= 2)
+        z *= w;
+    if(n == 1)
+        z *= (x + I*y)/hypot(x, y);
+    return z;
 }
 
 static const int DW = 8;
@@ -494,7 +487,8 @@ int main(int argc, char* argv[])
                         double fl, fh, ww;
                         int nl, nh;
                         
-                        const double cc = xi*xj + sc*(yi*yj+zi*zj);
+                        const double dp = xi*xj + sc*(yi*yj+zi*zj);
+                        const double cp = xj*yi - yj*xi;
                         
                         fl = dm*((ls ? 0.5*log(D) : sqrt(D)) - d0);
                         nl = floor(fl);
@@ -504,11 +498,8 @@ int main(int argc, char* argv[])
                         
                         ww = wi*wj;
                         
-                        gi = ui + I*vi;
-                        gi *= phase(S1, zj - zi*cc, xj*yi - xi*yj);
-                        
-                        gj = uj + I*vj;
-                        gj *= phase(S2, zi - zj*cc, xi*yj - xj*yi);
+                        gi = (ui + I*vi)*phase(S1, zi*dp - zj, cp);
+                        gj = (uj + I*vj)*phase(S2, zi - zj*dp, cp);
                         
                         xip = gi*conj(gj);
                         xim = gi*gj;
